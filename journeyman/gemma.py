@@ -5,8 +5,8 @@ a fenced block, or Gemma 4's native `<|tool_call>call:name{key:<|"|>value<|"|>}<
 `tool_calls()` reads all of them.
 
 Live hardening: each call has a kind (agent, observe, look, ears, question, why) with its own timeout;
-thinking is switched off and any thinking text is dropped before anyone reads the reply; response_format
-and chat_template_kwargs are dropped for good the first time the server rejects them; oversized and
+thinking is switched off (reasoning_effort "none" is the only switch Ollama /v1 honours) and any thinking
+text is dropped before anyone reads the reply; response_format, chat_template_kwargs and reasoning_effort are dropped for good the first time the server rejects them; oversized and
 surplus images are left out. Failures raise GemmaError, whose message is plain enough for the screen."""
 from __future__ import annotations
 
@@ -24,7 +24,8 @@ THINKING = [re.compile(r"<\|channel>.*?(?:<channel\|>|$)", re.S), re.compile(r"<
             re.compile(r"<thought>.*?(?:</thought>|$)", re.S)]
 REASONING_KEYS = ("reasoning_content", "reasoning", "thinking")
 OPTIONAL = {"response_format": ("response_format", "json_object", "json_schema", "json mode", "guided"),
-            "chat_template_kwargs": ("chat_template_kwargs", "enable_thinking")}
+            "chat_template_kwargs": ("chat_template_kwargs", "enable_thinking"),
+            "reasoning_effort": ("reasoning_effort",)}
 
 
 class GemmaError(OSError):
@@ -70,6 +71,7 @@ class Gemma:
             body["response_format"] = {"type": "json_object"}
         if not self.thinking:
             body["chat_template_kwargs"] = {"enable_thinking": False}
+            body["reasoning_effort"] = "none"
         start = time.time()
         while True:
             for key in self.unsupported:

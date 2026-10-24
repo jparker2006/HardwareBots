@@ -21,10 +21,14 @@ class Script:
         self.reject_audio = False
         self.reject_images = False
         self.text_tools = False
+        self.reject_fields: list[str] = []
         self.observe_replies: list[dict] = []
         self.why_replies: list[dict] = []
 
     def rejects(self, body: dict) -> str:
+        for field in self.reject_fields:
+            if field in body:
+                return f"unknown field {field}"
         parts = [p for m in body.get("messages", []) if isinstance(m.get("content"), list) for p in m["content"]]
         if self.reject_audio and any(p.get("type") == "input_audio" for p in parts):
             return "audio input is not supported by this model"
