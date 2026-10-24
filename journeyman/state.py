@@ -98,7 +98,7 @@ class State:
             if step is None:
                 proc = self.procedures[d["procedure"]]
                 step = {"id": d["step_id"], "procedure": d["procedure"], "n": len(proc["steps"]) + 1,
-                        "whys": [], "warnings": [], "mistakes": 0, "rev": 0, "confirmed": False}
+                        "whys": [], "warnings": [], "mistakes": 0, "rev": 0, "confirmed": False, "created": t}
                 proc["steps"].append(d["step_id"])
                 self.steps[d["step_id"]] = step
             for key in ("title", "action", "cue", "frame_id", "source"):
@@ -110,7 +110,8 @@ class State:
             step = self.steps.get(d["step_id"])
             if step:
                 step["whys"].append({"why": d["why"], "consequence": d.get("consequence", ""),
-                                     "source": d.get("source", "expert"), "confirmed": d.get("source") == "expert"})
+                                     "source": d.get("source", "expert"), "confirmed": d.get("source") == "expert",
+                                     "t": t})
                 step["rev"] += 1
         elif kind == "item_confirmed":
             step = self.steps.get(d["step_id"])
