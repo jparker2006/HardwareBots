@@ -27,25 +27,10 @@ def cmd_serve(_args):
 
 
 def cmd_doctor(args):
-    cfg = Config()
-    ok = True
-    print(f"gemma url   {cfg.gemma_url}")
-    try:
-        models = request_json(cfg.gemma_url.rstrip('/') + "/models", timeout=5)
-        print(f"  models    {[m['id'] for m in models.get('data', [])]}")
-    except Exception as e:
-        ok = False
-        print(f"  NOT REACHABLE: {e}")
-    try:
-        status = call(args.url, "status", {})
-        print(f"journeyman  {args.url} mode={status['mode']} camera={status['camera']['source']}")
-    except Exception as e:
-        print(f"journeyman  {args.url} not running ({e})")
-    online = internet_reachable()
-    print(f"internet    {'REACHABLE (turn Wi-Fi off for the demo)' if online else 'unreachable (offline)'}")
-    if args.offline and online:
-        ok = False
-    sys.exit(0 if ok else 1)
+    from . import doctor
+    checks = doctor.run(Config(), args.url, offline=args.offline)
+    print(doctor.to_json(checks) if args.json else doctor.render(checks))
+    sys.exit(1 if doctor.failed(checks) else 0)
 
 
 def cmd_replay(args):
@@ -99,22 +84,18 @@ def cmd_recordings(args):
 
 
 def cmd_bench(args):
-    from .gemma import Gemma, audio_part, image_part, text_part
+    from . import doctor
     cfg = Config()
-    g = Gemma(cfg.gemma_url, cfg.gemma_model)
-    t = time.time()
-    g.chat([{"role": "user", "content": "Say OK."}], max_tokens=5)
-    print(f"text round trip      {time.time() - t:.2f}s  ({g.model})")
-    if args.image:
-        t = time.time()
-        g.chat([{"role": "user", "content": [image_part(Path(args.image).read_bytes()),
-                                             text_part("What is in this image? One sentence.")]}], max_tokens=40)
-        print(f"image question       {time.time() - t:.2f}s")
-    if args.wav:
-        t = time.time()
-        msg, _ = g.chat([{"role": "user", "content": [audio_part(Path(args.wav).read_bytes()),
-                                                      text_part("Transcribe exactly.")]}], max_tokens=100)
-        print(f"audio transcription  {time.time() - t:.2f}s  {msg.get('content')!r}")
+    found, url, models = doctor.find_gemma(os.environ.get("JM_GEMMA_URL"), current=cfg.gemma_url)
+    if not url:
+        print(doctor.render([found]))
+        sys.exit(1)
+    model, _ = doctor.pick_model(models, cfg.gemma_model)
+    jpeg = Path(args.image).read_bytes() if args.image else None
+    wav = Path(args.wav).read_bytes() if args.wav else None
+    results = doctor.bench(url, model, args.runs, jpeg, wav)
+    print(json.dumps({"url": url, "model": model, "results": results}, indent=2) if args.json
+          else f"server {url}\n" + doctor.render_bench(model, results))
 
 
 def cmd_schema(_args):
@@ -128,6 +109,7 @@ def main(argv=None):
     sub.add_parser("serve", help="run the journeyman service").set_defaults(fn=cmd_serve)
     d = sub.add_parser("doctor", help="check Gemma, the service, the camera and whether you are offline")
     d.add_argument("--offline", action="store_true", help="fail if the internet is reachable")
+    d.add_argument("--json", action="store_true", help="machine-readable output")
     d.set_defaults(fn=cmd_doctor)
     r = sub.add_parser("replay", help="feed a recorded session through the running service")
     r.add_argument("dir")
@@ -138,9 +120,11 @@ def main(argv=None):
     rl = sub.add_parser("recordings", help="list recorded sessions with duration and counts")
     rl.add_argument("dir", nargs="?", help="default: $JM_DATA/recordings and ./recordings")
     rl.set_defaults(fn=cmd_recordings)
-    b = sub.add_parser("bench", help="time Gemma text, image and audio round trips")
-    b.add_argument("--image")
-    b.add_argument("--wav")
+    b = sub.add_parser("bench", help="time Gemma text, image, audio and tool round trips")
+    b.add_argument("--image", help="JPEG to use (default: a built-in red square)")
+    b.add_argument("--wav", help="16 kHz WAV to use (default: a built-in 1 s tone)")
+    b.add_argument("--runs", type=int, default=3)
+    b.add_argument("--json", action="store_true", help="machine-readable output")
     b.set_defaults(fn=cmd_bench)
     sub.add_parser("schema", help="print the agent tool schemas").set_defaults(fn=cmd_schema)
     for o in ops.REGISTRY.values():
