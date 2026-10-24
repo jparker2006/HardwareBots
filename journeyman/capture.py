@@ -151,6 +151,11 @@ class CaptureMixin:
             content = parts + [text_part(OBSERVE_PROMPT.format(frame_ids=", ".join(ids), said=said_text, known=known))]
             result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=500)
             steps, gaps = parse_observation(result, ids)
+            for item in steps + gaps:
+                item["frame_id"] = item["frame_id"] or ids[-1]
+            seen = [x["action"] for x in steps + gaps]
+            if seen:
+                self.core.emit("observed", text="; ".join(seen), frame_id=(steps + gaps)[0]["frame_id"], source="capture")
             for st in steps:
                 if any(ops.similar(st["action"], k.get("action", "")) >= 0.6 for k in self._steps()):
                     continue
