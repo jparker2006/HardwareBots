@@ -50,3 +50,22 @@ class UITest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class StaticUiTest(unittest.TestCase):
+    def test_ui_files_are_served_and_traversal_is_refused(self):
+        import tempfile, threading, urllib.request, urllib.error
+        from http.server import ThreadingHTTPServer
+        from journeyman.config import Config
+        from journeyman.core import Core
+        from journeyman.server import make_handler
+        core = Core(Config(gemma_url="http://127.0.0.1:9/v1", data_dir=tempfile.mkdtemp(), camera="none"), sync=True)
+        srv = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(core))
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        base = f"http://127.0.0.1:{srv.server_port}"
+        try:
+            self.assertEqual(urllib.request.urlopen(base + "/ui/index.html").status, 200)
+            with self.assertRaises(urllib.error.HTTPError):
+                urllib.request.urlopen(base + "/ui/../server.py")
+        finally:
+            srv.shutdown()
