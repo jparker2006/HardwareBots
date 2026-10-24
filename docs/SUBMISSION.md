@@ -25,7 +25,7 @@ Every shop has a senior tech whose know-how was never written down. When they ex
 
 **Track:** Physical AI, Robotics and Embedded Devices (Embedded track). Add "Best Use of LiteRT" only if the LiteRT piece runs.
 
-**Team:** Jake (software), [teammate name] (hardware). *Names only. No employers.*
+**Team:** Jake (software), [teammate name] (hardware).
 
 **Repo:** https://github.com/jparker2006/HardwareBots (Apache-2.0)
 
