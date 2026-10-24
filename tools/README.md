@@ -24,7 +24,7 @@ afconvert -f WAVE -d LEI16@16000 memo.m4a line.wav
 
 ## 2. Run
 ```sh
-git clone https://github.com/jparker2006/journeyman.git && cd journeyman
+git clone https://github.com/jparker2006/Journeyman.git && cd journeyman
 python3 tools/gemma_probe.py http://<thor-ip>:<port>/v1 phone.jpg line.wav
 ```
 - The model name is detected automatically. Override it with `--model NAME`.
