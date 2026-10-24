@@ -98,7 +98,11 @@ def start() -> tuple[ThreadingHTTPServer, Script, str]:
             error = script.rejects(body)
             if error:
                 return self._json({"error": {"message": error}}, 400)
-            msg = {"role": "assistant", **script.reply(body)}
+            reply = dict(script.reply(body))
+            status = reply.pop("_status", 200)
+            if status != 200:
+                return self._json({"error": {"message": reply.get("error", "bad request")}}, status)
+            msg = {"role": "assistant", **reply}
             self._json({"choices": [{"message": msg}]})
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
