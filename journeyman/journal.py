@@ -12,7 +12,7 @@ EVENT_TYPES = {
     "session_started", "session_ended", "utterance_heard", "frame_kept", "gap_noticed",
     "question_asked", "answer_attached", "step_saved", "why_saved", "item_confirmed",
     "item_corrected", "question_logged", "disagreement_flagged", "trainee_step_done",
-    "trainee_mistake", "lesson_saved", "said", "note",
+    "trainee_mistake", "teach_moved", "lesson_saved", "said", "note",
 }
 
 
