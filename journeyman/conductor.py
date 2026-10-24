@@ -94,9 +94,10 @@ class Conductor(CaptureMixin, TeachMixin):
 
     def _handle(self, item) -> None:
         kind, payload, t0, t1 = item
+        extra = {}
         if kind == "audio":
             try:
-                text, secs, _path = self.core.ears.transcribe(payload)
+                text, secs, extra["audio"] = self.core.ears.transcribe(payload)
             except Exception as e:
                 self.core.note("error", f"ears: {e}")
                 return
@@ -107,7 +108,7 @@ class Conductor(CaptureMixin, TeachMixin):
         if not text:
             return
         self.last_utterance_end = t1
-        self.core.emit("utterance_heard", session_id=self.core.state.session_id, text=text, t0=t0, t1=t1)
+        self.core.emit("utterance_heard", session_id=self.core.state.session_id, text=text, t0=t0, t1=t1, **extra)
         self.on_utterance(text)
 
     # ---- routing ----------------------------------------------------------

@@ -127,7 +127,7 @@ def status(core):
     s = core.state
     return {"mode": s.mode, "session": s.session_id, "procedure": s.procedure,
             "procedures": {n: len(p["steps"]) for n, p in s.procedures.items()},
-            "open_questions": len(s.open_questions), "pending_question": s.pending_question,
+            "open_questions": len(s.open_questions), "questions_asked": len(s.questions), "pending_question": s.pending_question,
             "camera": core.eyes.status(), "seq": s.last_seq}
 
 

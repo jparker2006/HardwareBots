@@ -1,4 +1,4 @@
-"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/doctor/bench are local."""
+"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/recordings/doctor/bench are local."""
 from __future__ import annotations
 
 import argparse
@@ -50,26 +50,52 @@ def cmd_doctor(args):
 
 def cmd_replay(args):
     """Feed a recording through the running service: script.jsonl lines with at + one of text/wav/frame/op."""
-    root = Path(args.dir)
-    lines = [json.loads(x) for x in (root / "script.jsonl").read_text().splitlines() if x.strip()]
-    start = time.time()
-    for line in sorted(lines, key=lambda x: x.get("at", 0)):
-        wait = line.get("at", 0) / args.speed - (time.time() - start)
-        if wait > 0:
-            time.sleep(wait)
-        if "op" in line:
-            print("op   ", line["op"], call(args.url, line["op"], line.get("args", {})))
-        elif "text" in line:
-            request_json(f"{args.url}/api/headset/utterance", {"text": line["text"]})
-            print("said ", line["text"])
-        elif "wav" in line:
-            wav = (root / line["wav"]).read_bytes()
-            request_json(f"{args.url}/api/headset/utterance", {"wav_b64": base64.b64encode(wav).decode()})
-            print("wav  ", line["wav"])
-        elif "frame" in line:
-            jpg = (root / line["frame"]).read_bytes()
-            request_json(f"{args.url}/api/frames", {"jpeg_b64": base64.b64encode(jpg).decode()})
+    from .recorder import play
+    speed = 20.0 if args.fast else args.speed
+    before = call(args.url, "status", {})
+
+    def send(kind, value, line):
+        if kind == "op":
+            print("op   ", value, call(args.url, value, line.get("args", {})))
+        elif kind == "text":
+            request_json(f"{args.url}/api/headset/utterance", {"text": value})
+            print("said ", value)
+        elif kind == "wav":
+            request_json(f"{args.url}/api/headset/utterance", {"wav_b64": base64.b64encode(value).decode()})
+            print("wav  ", line["wav"], f"(heard: {line['heard']})" if line.get("heard") else "")
+        else:
+            request_json(f"{args.url}/api/frames", {"jpeg_b64": base64.b64encode(value).decode()})
             print("frame", line["frame"])
+
+    n = play(Path(args.dir), send, speed)
+    after, seq, quiet, deadline = call(args.url, "status", {}), None, 0.0, time.time() + args.settle
+    while time.time() < deadline:
+        if after["seq"] != seq:
+            seq, quiet = after["seq"], time.time()
+        elif time.time() - quiet >= 3:
+            break
+        time.sleep(0.5)
+        after = call(args.url, "status", {})
+    steps = sum(after["procedures"].values()) - sum(before["procedures"].values())
+    asked = after.get("questions_asked", 0) - before.get("questions_asked", 0)
+    logged = after["open_questions"] - before["open_questions"]
+    print(f"replayed {n} lines: {steps} step{'s' if steps != 1 else ''} saved, {asked} question{'s' if asked != 1 else ''}"
+          f" asked, {logged} open question{'s' if logged != 1 else ''} logged; mode now {after['mode']}")
+
+
+def cmd_recordings(args):
+    from .recorder import summarize
+    roots = [Path(args.dir)] if args.dir else [Config().data_dir / "recordings", Path(__file__).parent.parent / "recordings"]
+    found = False
+    for root in roots:
+        for d in sorted(p for p in root.glob("*") if (p / "script.jsonl").exists()):
+            found = True
+            s = summarize(d)
+            label = " ".join(x for x in (s["kind"], s["procedure"]) if x)
+            print(f"{str(d):40} {s['duration_s']:7.1f}s  {s['utterances']:3} utterances ({s['audio']} audio)"
+                  f"  {s['frames']:3} frames  {s['ops']} ops  {label}")
+    if not found:
+        print(f"no recordings in {', '.join(str(r) for r in roots)}")
 
 
 def cmd_bench(args):
@@ -106,7 +132,12 @@ def main(argv=None):
     r = sub.add_parser("replay", help="feed a recorded session through the running service")
     r.add_argument("dir")
     r.add_argument("--speed", type=float, default=1.0)
+    r.add_argument("--fast", action="store_true", help="same as --speed 20")
+    r.add_argument("--settle", type=float, default=120, help="max seconds to wait for the service to go quiet")
     r.set_defaults(fn=cmd_replay)
+    rl = sub.add_parser("recordings", help="list recorded sessions with duration and counts")
+    rl.add_argument("dir", nargs="?", help="default: $JM_DATA/recordings and ./recordings")
+    rl.set_defaults(fn=cmd_recordings)
     b = sub.add_parser("bench", help="time Gemma text, image and audio round trips")
     b.add_argument("--image")
     b.add_argument("--wav")
