@@ -1,4 +1,4 @@
-"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/doctor/bench are local."""
+"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/doctor/bench/eval are local."""
 from __future__ import annotations
 
 import argparse
@@ -91,6 +91,14 @@ def cmd_bench(args):
         print(f"audio transcription  {time.time() - t:.2f}s  {msg.get('content')!r}")
 
 
+def cmd_eval(args):
+    from .eval import run
+    cfg = Config()
+    if args.every is not None:
+        cfg.observe_every_s = args.every
+    run(args.dir, cfg, tail_s=args.tail, everything=args.all)
+
+
 def cmd_schema(_args):
     print(json.dumps(ops.tool_schemas(), indent=2))
 
@@ -111,6 +119,12 @@ def main(argv=None):
     b.add_argument("--image")
     b.add_argument("--wav")
     b.set_defaults(fn=cmd_bench)
+    e = sub.add_parser("eval", help="run capture prompts offline over a recording against the configured Gemma")
+    e.add_argument("dir")
+    e.add_argument("--every", type=float, help="observe every N script seconds (default JM_OBSERVE_EVERY)")
+    e.add_argument("--tail", type=float, default=15.0, help="seconds to keep watching after the script ends")
+    e.add_argument("--all", action="store_true", help="keep going after the capture session ends")
+    e.set_defaults(fn=cmd_eval)
     sub.add_parser("schema", help="print the agent tool schemas").set_defaults(fn=cmd_schema)
     for o in ops.REGISTRY.values():
         sp = sub.add_parser(o.name.replace("_", "-"), help=o.help)
