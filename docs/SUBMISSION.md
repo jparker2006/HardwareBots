@@ -27,6 +27,6 @@ Every shop has a senior tech whose know-how was never written down. When they ex
 
 **Team:** Jake (software), [teammate name] (hardware).
 
-**Repo:** https://github.com/jparker2006/HardwareBots (Apache-2.0)
+**Repo:** https://github.com/jparker2006/journeyman (Apache-2.0)
 
 **Vision:** Journeyman turns a senior tech's hands-on work into skills: for people today, robots tomorrow.

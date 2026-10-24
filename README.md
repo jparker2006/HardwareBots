@@ -29,7 +29,7 @@ Check it with `python3 tools/gemma_probe.py http://localhost:8000/v1 photo.jpg c
 
 ### 2. Thor: start Journeyman
 ```sh
-git clone https://github.com/jparker2006/HardwareBots.git && cd HardwareBots
+git clone https://github.com/jparker2006/journeyman.git && cd journeyman
 python3 -c "import cv2" || pip3 install opencv-python   # camera; GStreamer is used if OpenCV is missing
 JM_GEMMA_URL=http://localhost:8000/v1 ./jm serve
 ```
@@ -37,7 +37,7 @@ Open `http://localhost:3000` on the monitor. `./jm doctor` checks Gemma, the cam
 
 ### 3. Mac: start the headset
 ```sh
-git clone https://github.com/jparker2006/HardwareBots.git && cd HardwareBots
+git clone https://github.com/jparker2006/journeyman.git && cd journeyman
 pip3 install sounddevice numpy
 python3 headset/headset.py --thor http://192.168.55.1:3000          # talk
 python3 headset/headset.py --thor http://192.168.55.1:3000 --text   # or type
