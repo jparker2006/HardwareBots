@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import unittest
 
+from journeyman import doctor
 from journeyman.gemma import Gemma
 from tests import fake_gemma
 
@@ -28,6 +29,10 @@ class ConformanceTest(unittest.TestCase):
         self.gemma.chat([{"role": "user", "content": "again"}])
         self.assertEqual(len(self.script.requests), 2)
         self.assertNotIn("reasoning_effort", self.script.requests[-1])
+
+    def test_doctor_probes_ask_for_no_thinking(self):
+        doctor.chat(self.url, "fake-gemma", "Say OK.", max_tokens=5)
+        self.assertEqual(self.script.requests[-1]["reasoning_effort"], "none")
 
 
 if __name__ == "__main__":

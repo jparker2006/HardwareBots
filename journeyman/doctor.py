@@ -11,14 +11,13 @@ import shutil
 import statistics
 import struct
 import sys
-import time
 import urllib.error
 import wave
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .config import Config
-from .gemma import audio_part, image_part, text_part
+from .gemma import Gemma, audio_part, image_part, text_part
 from .local_http import internet_reachable, request_json
 
 PORTS = [(8000, "vLLM"), (8080, "llama.cpp"), (11434, "Ollama")]
@@ -68,15 +67,9 @@ def _err(e: Exception) -> str:
     return f"{e} {body}".strip()
 
 
-def chat(url: str, model: str, content, tools=None, max_tokens: int = 40, timeout: float = 120.0) -> tuple[dict, float]:
-    body: dict = {"model": model, "messages": [{"role": "user", "content": content}],
-                  "max_tokens": max_tokens, "temperature": 0}
-    if tools:
-        body["tools"] = tools
-        body["tool_choice"] = "auto"
-    start = time.time()
-    out = request_json(url.rstrip("/") + "/chat/completions", body, timeout=timeout)
-    return out["choices"][0]["message"], time.time() - start
+def chat(url: str, model: str, content, tools=None, max_tokens: int = 40) -> tuple[dict, float]:
+    return Gemma(url, model).chat([{"role": "user", "content": content}], tools=tools, max_tokens=max_tokens,
+                                  temperature=0)
 
 
 def list_models(url: str, timeout: float = 3.0) -> list[str]:
