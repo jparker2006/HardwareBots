@@ -1,4 +1,4 @@
-"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/recordings/doctor/bench/eval are local."""
+"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/recordings/doctor/bench/eval/seed/reset are local."""
 from __future__ import annotations
 
 import argparse
@@ -106,6 +106,44 @@ def cmd_eval(args):
     run(args.dir, cfg, tail_s=args.tail, everything=args.all)
 
 
+def service_up(url: str) -> bool:
+    try:
+        request_json(f"{url}/api/ops/status", {}, timeout=2)
+        return True
+    except Exception:
+        return False
+
+
+def cmd_seed(args):
+    """Write a known-good card with no model call: through the running service if up, else straight into JM_DATA."""
+    from . import demo
+    if service_up(args.url):
+        run, where = (lambda name, a: call(args.url, name, a)), args.url
+    else:
+        from .core import Core
+        core = Core(Config(), sync=True)
+        run, where = (lambda name, a: ops.run(core, name, a)), str(core.config.data_dir)
+    try:
+        r = demo.seed(run, demo.load_card(Path(args.recording)), confirm=not args.unconfirmed)
+    except demo.SeedError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
+    print(f"seeded {r['procedure']}: {r['steps']} steps, {r['whys']} reasons"
+          f"{', confirmed' if r['confirmed'] else ', unconfirmed'}, into {where}")
+
+
+def cmd_reset(args):
+    from . import demo
+    if service_up(args.url):
+        print(f"journeyman is running at {args.url}. Stop `jm serve` first, then reset.", file=sys.stderr)
+        sys.exit(1)
+    data_dir = Config().data_dir
+    dest = demo.reset(data_dir)
+    print(f"archived {data_dir} to {dest}; starting clean" if dest else f"{data_dir} is already clean")
+    if args.seed:
+        cmd_seed(argparse.Namespace(url=args.url, recording=args.seed, unconfirmed=False))
+
+
 def cmd_schema(_args):
     print(json.dumps(ops.tool_schemas(), indent=2))
 
@@ -140,6 +178,13 @@ def main(argv=None):
     e.add_argument("--tail", type=float, default=15.0, help="seconds to keep watching after the script ends")
     e.add_argument("--all", action="store_true", help="keep going after the capture session ends")
     e.set_defaults(fn=cmd_eval)
+    sd = sub.add_parser("seed", help="build a known-good procedure card from a recording, no model needed")
+    sd.add_argument("recording", help="a recording folder (uses its card.json if present) or a card .json file")
+    sd.add_argument("--unconfirmed", action="store_true", help="leave the steps unconfirmed")
+    sd.set_defaults(fn=cmd_seed)
+    rs = sub.add_parser("reset", help="archive JM_DATA to JM_DATA/archive/<time> and start clean")
+    rs.add_argument("--seed", metavar="RECORDING", help="seed this recording after the reset")
+    rs.set_defaults(fn=cmd_reset)
     sub.add_parser("schema", help="print the agent tool schemas").set_defaults(fn=cmd_schema)
     for o in ops.REGISTRY.values():
         sp = sub.add_parser(o.name.replace("_", "-"), help=o.help)

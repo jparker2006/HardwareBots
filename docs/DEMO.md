@@ -11,9 +11,18 @@ Roles: **Expert** does the capture. **Speaker** talks to the judges and runs the
 - [ ] **Thor:** Gemma is serving (`curl -s localhost:8000/v1/models`), then `JM_GEMMA_URL=http://localhost:8000/v1 ./jm serve`.
 - [ ] `./jm doctor --offline` exits 0. It should list the Gemma model, show Journeyman running with the camera source, and show the internet as unreachable.
 - [ ] **Mac:** `python3 headset/headset.py --thor http://192.168.55.1:3000`. Keep a second terminal ready with `--text`.
-- [ ] **Clean state:** start with a fresh `JM_DATA` folder, or one with only the rehearsed card. Know which one you're using.
+- [ ] **Clean state:** with `jm serve` stopped, run `./jm reset`. It moves everything in `JM_DATA` to `JM_DATA/archive/<time>/` (nothing is deleted) and starts clean. For a safety-net card too, run `./jm reset --seed recordings/demo`. Know which one you're using.
 - [ ] **Backup:** the recorded video is open in a tab, and `./jm replay recordings/demo --speed 2` has been tested.
 - [ ] One full dry run in the room, to check noise and lighting.
+
+## Demo-safe mode: seed and reset
+If live capture misbehaves, teach mode still works from a known-good card. No model call is needed to build it.
+- `./jm seed recordings/demo` writes the rehearsed 4-step cable-swap card (`recordings/demo/card.json`), with every step and reason confirmed. If `jm serve` is running, it goes through the service, so the monitor updates live. If not, it writes straight into `JM_DATA`.
+- Add `--unconfirmed` to leave the steps unconfirmed. Seeding a recording folder that has no `card.json` builds the steps from the expert's capture lines in `script.jsonl`.
+- Seeding refuses if the procedure already has steps ("Run `jm reset` first"), so you can't stack a second copy.
+- `./jm reset` refuses while `jm serve` is running. Stop the service, reset, then start it again.
+- **Rehearsed recovery (about 20 s):** Ctrl-C `jm serve`, then `./jm reset --seed recordings/demo`, then `JM_GEMMA_URL=... ./jm serve`. Then say "teach me".
+- **Mid-demo, capture went badly but the service is fine:** `./jm card cable-swap` shows what was saved. If the card is empty, `./jm seed recordings/demo` loads the card live. If it has partial steps, do the rehearsed recovery.
 
 ## Beats
 | Time | Who | Do | Say / expect |
@@ -48,6 +57,7 @@ Then the close: why Gemma, local and Thor, the business case and the vision line
 | **Misheard speech** | "The room's loud. I'll type it. It's the same pipeline, the same model." | Use the `--text` headset terminal. |
 | **Camera miss** (passes or fails a step wrongly) | "It didn't see that. That's why it asks instead of assuming, and why the expert confirms the card." | Hold the work closer to the Brio and say "next" again. |
 | **Wrong or odd answer** | "Everything it infers is marked unconfirmed until the expert says yes. Here's the card." | Show the card: `./jm card cable-swap`. |
+| **Capture saved a bad or empty card** | "Here's the card we captured in rehearsal. Teaching works the same way." | Empty card: `./jm seed recordings/demo`. Partial card: Ctrl-C `serve`, `./jm reset --seed recordings/demo`, restart `serve`. |
 | **Gemma or Thor down** | "Here's the same pipeline running a recorded session." | `./jm replay recordings/demo --speed 2`, or play the backup video. |
 | **Headset link drops** | "The Mac is just the mic and speaker. Thor does the rest." | Restart `headset.py`, or use `--text`. |
 
