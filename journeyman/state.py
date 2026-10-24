@@ -24,6 +24,7 @@ class State:
         self.said: list[dict] = []
         self.notes: list[dict] = []
         self.mode = "idle"
+        self.voice_state = "listening"
         self.session_id: str | None = None
         self.procedure: str | None = None
         self.teach_index = 0
@@ -50,7 +51,7 @@ class State:
 
     def snapshot(self) -> dict:
         snap = {
-            "seq": self.last_seq, "mode": self.mode, "session_id": self.session_id,
+            "seq": self.last_seq, "mode": self.mode, "voice_state": self.voice_state, "session_id": self.session_id,
             "procedure": self.procedure, "teach_index": self.teach_index,
             "pending_question": self.pending_question,
             "procedures": {n: {**p, "steps": self.procedure_steps(n)} for n, p in self.procedures.items()},
@@ -178,6 +179,8 @@ class State:
             self.observed = {"text": d["text"], "frame_id": d.get("frame_id"), "source": d.get("source"), "t": t}
         elif kind == "note":
             self.notes.append({**d, "t": t})
+        elif kind == "voice_state":
+            self.voice_state = d["state"]
 
     def _ensure_procedure(self, name: str, t: float) -> None:
         if name not in self.procedures:

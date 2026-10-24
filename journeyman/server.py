@@ -84,6 +84,10 @@ def make_handler(core):
                     elif body.get("text"):
                         core.conductor.submit_text(body["text"], t0, t1)
                     return self._send(202, {"accepted": True, "id": body.get("id")})
+                if url.path == "/api/headset/voice":
+                    if body.get("state") == "hearing":
+                        core.voice.heard()
+                    return self._send(200, {"voice_state": core.state.voice_state})
                 if url.path == "/api/headset/said":
                     core.spoken(body.get("id", ""))
                     return self._send(200, {"ok": True})

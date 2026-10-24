@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Journeyman headset for the Mac: mic → speech detection → Thor; Thor's replies → macOS `say`.
 
-  python3 headset/headset.py --thor http://192.168.55.1:3000          # voice, hands-free
-  python3 headset/headset.py --thor http://192.168.55.1:3000 --ptt    # push-to-talk: Enter starts, Enter stops
-  python3 headset/headset.py --thor http://192.168.55.1:3000 --text   # type instead of talking
-  python3 headset/headset.py --list-devices                           # then --device 2 or --device "USB"
+  python3 headset/headset.py                  # voice, hands-free; finds Thor (USB-C link first, then venue Wi-Fi)
+  python3 headset/headset.py --ptt            # push-to-talk: Enter starts, Enter stops
+  python3 headset/headset.py --text           # type instead of talking
+  python3 headset/headset.py --thor http://192.168.55.1:3000     # one fixed address (or several, comma-separated)
+  python3 headset/headset.py --list-devices   # then --device 2 or --device "USB"
 
-The mic is ignored while Journeyman speaks. If Thor restarts, the headset reconnects by itself.
+The mic is ignored while Journeyman speaks. If Thor restarts, the headset reconnects by itself. If the address
+in use stops answering (say Wi-Fi is turned off), it switches to the next one that answers and says so.
 Needs `pip3 install sounddevice numpy` for voice mode. Text mode needs nothing.
 """
 from __future__ import annotations
@@ -27,6 +29,7 @@ import wave
 
 RATE = 16000
 BLOCK = 480  # 30 ms
+THOR = "http://192.168.55.1:3000,http://192.168.3.131:3000"
 
 try:
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -86,12 +89,64 @@ def meter(level: float, threshold: float, state: str = "", width: int = 24) -> s
     return f"mic [{''.join(bar)}] {level:5.0f}/{threshold:.0f} {state}".rstrip()
 
 
-class Link:
-    """Talks to Thor. Says once when Thor goes away and once when it is back, instead of spamming errors."""
+def addresses(spec: str) -> list:
+    return [a.strip().rstrip("/") for a in spec.split(",") if a.strip()]
 
-    def __init__(self, thor: str, console: Console):
-        self.thor, self.console = thor.rstrip("/"), console
+
+def describe(url: str) -> str:
+    return f"USB-C link ({url})" if "//192.168.55." in url else f"network ({url})"
+
+
+def reachable(url: str, timeout: float = 1.5) -> bool:
+    try:
+        request_json(url + "/api/ops/status", {}, timeout=timeout)
+        return True
+    except urllib.error.HTTPError:
+        return True
+    except Exception:
+        return False
+
+
+def pick(urls: list, probe=reachable) -> str | None:
+    """The first address that answers, in order (USB-C link first by default)."""
+    for url in urls:
+        if probe(url):
+            return url
+    return None
+
+
+class Link:
+    """Talks to Thor. Says once when Thor goes away and once when it is back, instead of spamming errors.
+
+    With several addresses it uses the first that answers, and moves to another one when that stops answering.
+    """
+
+    def __init__(self, thor: str, console: Console, probe=reachable):
+        self.urls, self.console, self.probe = addresses(thor), console, probe
+        self.thor = self.urls[0]
         self.up: bool | None = None
+        self._next_pick = 0.0
+        self._pick_lock = threading.Lock()
+
+    def choose(self, announce: bool = True) -> bool:
+        url = pick(self.urls, self.probe)
+        if url is None:
+            return False
+        if url != self.thor or announce:
+            self.console.line(f"[thor] {'using' if announce else 'switched to'} {describe(url)}"
+                              + ("" if url == self.urls[0] else f"; {self.urls[0]} not answering"))
+        self.thor = url
+        return True
+
+    def failover(self) -> None:
+        if len(self.urls) < 2 or not self._pick_lock.acquire(blocking=False):
+            return
+        try:
+            if time.time() >= self._next_pick:
+                self._next_pick = time.time() + 2.0
+                self.choose(announce=False)
+        finally:
+            self._pick_lock.release()
 
     def _mark(self, ok: bool, err: Exception | None = None) -> None:
         if ok and self.up is False:
@@ -112,6 +167,7 @@ class Link:
                 raise
             except Exception as e:
                 self._mark(False, e)
+                self.failover()
                 if time.time() >= deadline:
                     raise
                 time.sleep(0.5)
@@ -192,6 +248,16 @@ def to_wav(samples) -> bytes:
     return buf.getvalue()
 
 
+def tell_hearing(link: Link) -> None:
+    """Lets the screen show "hearing you" while you are still talking."""
+    def send():
+        try:
+            link.call("/api/headset/voice", {"state": "hearing"}, timeout=3)
+        except Exception:
+            pass
+    threading.Thread(target=send, daemon=True).start()
+
+
 def send_clip(link: Link, timing: Timing, samples, speech_end: float, note: str = "") -> None:
     seconds = len(samples) / RATE
     t0 = speech_end - seconds
@@ -231,6 +297,7 @@ def listen(link: Link, speaker: Speaker, timing: Timing, args) -> None:
             vad.calibrate(noise[:, 0])
         con.line(f"listening (noise {vad.floor:.0f}, threshold {vad.threshold:.0f}). "
                  "Too loud in here? restart with --ptt. Ctrl-C to quit.")
+        was_active = False
         while True:
             block, _ = stream.read(BLOCK)
             block = block[:, 0].copy()
@@ -239,6 +306,9 @@ def listen(link: Link, speaker: Speaker, timing: Timing, args) -> None:
                 con.meter(meter(0, vad.threshold, "(journeyman speaking)"))
                 continue
             utt = vad.feed(block)
+            if vad.active and not was_active:
+                tell_hearing(link)
+            was_active = vad.active
             con.meter(meter(vad.level, vad.threshold, "REC" if vad.active else ""))
             if utt is not None:
                 note = ", cut at --max-seconds" if utt.cut else ""
@@ -269,6 +339,7 @@ def push_to_talk(link: Link, speaker: Speaker, timing: Timing, args) -> None:
             if speaker.busy():
                 con.line("(journeyman is still talking; recording anyway)")
             rec["blocks"], rec["on"] = [], True
+            tell_hearing(link)
             con.line("recording... Enter to send")
             input()
             rec["on"] = False
@@ -301,7 +372,8 @@ def type_loop(link: Link, timing: Timing) -> None:
 
 def main(argv: list | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("--thor", default="http://192.168.55.1:3000", help="journeyman service URL on Thor")
+    p.add_argument("--thor", default=os.environ.get("JM_THOR", THOR),
+                   help="journeyman service URL on Thor; comma-separated = try in order (default: USB-C link, then Wi-Fi)")
     p.add_argument("--text", action="store_true", help="type instead of talking")
     p.add_argument("--ptt", action="store_true", help="push-to-talk: Enter starts, Enter stops (for loud rooms)")
     p.add_argument("--list-devices", action="store_true", help="list audio devices and exit")
@@ -316,6 +388,8 @@ def main(argv: list | None = None) -> None:
         return list_devices()
     console = Console()
     link = Link(args.thor, console)
+    if not link.choose():
+        console.line(f"[thor] none of {', '.join(link.urls)} answering; will keep trying, starting with {link.thor}")
     try:
         mode = link.call("/api/ops/status", {}, timeout=5)["result"]["mode"]
         console.line(f"journeyman status: {mode}")

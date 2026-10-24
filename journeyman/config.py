@@ -27,6 +27,7 @@ class Config:
     gap_confidence: float = field(default_factory=lambda: float(_env("JM_GAP_CONFIDENCE", "0.6")))
     max_tool_calls: int = field(default_factory=lambda: int(_env("JM_MAX_TOOL_CALLS", "4")))
     default_procedure: str = field(default_factory=lambda: _env("JM_PROCEDURE", "cable-swap"))
+    filler_after_s: float = field(default_factory=lambda: float(_env("JM_FILLER_AFTER", "4")))
     expert_name: str = field(default_factory=lambda: _env("JM_EXPERT", "the expert"))
 
     def __post_init__(self) -> None:
