@@ -1,10 +1,15 @@
 # Journeyman
 
-A voice-first instructor for hands-on work that runs entirely on a Jetson Thor. No cloud.
+**A fully local AI instructor that learns a senior tech's hands-on work by asking "why?", then teaches the next person by voice.** It runs on Gemma 4 on an NVIDIA Jetson AGX Thor. No cloud.
 
-It watches and listens while a senior technician works and asks about the steps they don't explain ("You labeled both ends before plugging in. Why?"). It saves what it learns as a procedure card. Then it teaches the next person by voice: it watches them work, catches skipped steps, answers "why?" in the expert's own words, and says "not captured" instead of guessing. Every trainee slip and every unanswered question goes back into its memory.
+It watches and listens while a senior technician works and asks about the steps they don't explain ("You labeled both ends before plugging in. Why?"). It saves what it learns as a procedure card, and each item records whether the expert said it or the AI guessed it. Then it teaches the next person by voice: it checks their work with the camera, catches skipped steps, answers "why?" in the expert's own words, and says "not captured" instead of guessing. Every trainee slip and every unanswered question goes back into its memory.
 
-Built at the Google Gemma Hardware Hackathon (AGI House, 2026-10-24) with Gemma 4. Track: Physical AI, Robotics and Embedded Devices.
+Journeyman turns a senior tech's hands-on work into skills: for people today, robots tomorrow.
+
+- **Built at** the Google Gemma Hardware Hackathon (AGI House, 2026-10-24), with Gemma 4.
+- **Track:** Physical AI, Robotics and Embedded Devices (Embedded track).
+- **Status:** the full capture → teach → improve loop passes end-to-end tests against a scripted Gemma stand-in. Running live on Thor with the Brio camera and voice is the target, and isn't verified yet.
+- **Docs:** [pitch](docs/PITCH.md), [demo run sheet](docs/DEMO.md), [submission](docs/SUBMISSION.md), [architecture](docs/ARCHITECTURE.md).
 
 ```
  Mac (headset): mic + speaker  ──USB-C──▶  Thor: journeyman service + Gemma 4 + Brio camera ──HDMI──▶ monitor
