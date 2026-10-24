@@ -21,6 +21,8 @@ class Script:
         self.reject_audio = False
         self.reject_images = False
         self.text_tools = False
+        self.observe_replies: list[dict] = []
+        self.why_replies: list[dict] = []
 
     def rejects(self, body: dict) -> str:
         parts = [p for m in body.get("messages", []) if isinstance(m.get("content"), list) for p in m["content"]]
@@ -39,6 +41,8 @@ class Script:
             return {"content": "start capture"}
         if "new_steps" in text:
             self.observe_calls += 1
+            if self.observe_replies:
+                return {"content": json.dumps(self.observe_replies.pop(0))}
             if self.observe_calls == 1:
                 return {"content": json.dumps({
                     "new_steps": [{"title": "Unplug the old cable", "action": "unplugs the old network cable",
@@ -48,6 +52,8 @@ class Script:
         if "friendly spoken question" in text:
             return {"content": "Why did you label both ends before plugging in?"}
         if '"why"' in text and "answered" in text:
+            if self.why_replies:
+                return {"content": json.dumps(self.why_replies.pop(0))}
             return {"content": json.dumps({"why": "so the next tech can trace it without pulling cables",
                                            "consequence": "someone unplugs the wrong server"})}
         if "Has this step been done" in text:
