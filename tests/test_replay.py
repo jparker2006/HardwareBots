@@ -101,7 +101,7 @@ class ReplayTest(unittest.TestCase):
         demo = Path(__file__).parent.parent / "recordings" / "demo"
         fresh = self.core()
         self.assertEqual(replay_into(fresh, demo), 8)
-        self.assertEqual(fresh.state.mode, "teach")
+        self.assertIn("teach", [x["kind"] for x in fresh.state.sessions.values()])
         out = io.StringIO()
         with redirect_stdout(out):
             cli.main(["recordings", str(demo.parent)])
