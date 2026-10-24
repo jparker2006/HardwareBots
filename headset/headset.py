@@ -1,9 +1,12 @@
 #!/usr/bin/env python3
 """Journeyman headset for the Mac: mic → speech detection → Thor; Thor's replies → macOS `say`.
 
-  python3 headset/headset.py --thor http://192.168.55.1:3000          # voice
+  python3 headset/headset.py --thor http://192.168.55.1:3000          # voice, hands-free
+  python3 headset/headset.py --thor http://192.168.55.1:3000 --ptt    # push-to-talk: Enter starts, Enter stops
   python3 headset/headset.py --thor http://192.168.55.1:3000 --text   # type instead of talking
+  python3 headset/headset.py --list-devices                           # then --device 2 or --device "USB"
 
+The mic is ignored while Journeyman speaks. If Thor restarts, the headset reconnects by itself.
 Needs `pip3 install sounddevice numpy` for voice mode. Text mode needs nothing.
 """
 from __future__ import annotations
@@ -12,57 +15,171 @@ import argparse
 import base64
 import io
 import json
+import math
+import os
 import subprocess
+import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import wave
 
 RATE = 16000
 BLOCK = 480  # 30 ms
 
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    from journeyman.local_http import NotLocal, request_json
+except ImportError:
+    class NotLocal(Exception):
+        pass
 
-def post(url: str, body: dict) -> dict:
-    req = urllib.request.Request(url, json.dumps(body).encode(), {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=30) as r:
-        return json.load(r)
+    def request_json(url: str, body: dict | None = None, timeout: float = 30.0) -> dict:
+        data = json.dumps(body).encode() if body is not None else None
+        req = urllib.request.Request(url, data, {"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.load(r)
 
 
-def get(url: str, timeout: float = 30) -> dict:
-    with urllib.request.urlopen(url, timeout=timeout) as r:
-        return json.load(r)
+class Console:
+    """Prints log lines over a one-line live mic meter without garbling either."""
+
+    def __init__(self, stream=None):
+        self.out = stream or sys.stdout
+        self.tty = self.out.isatty()
+        self.lock = threading.Lock()
+        self.shown = False
+        self.last = 0.0
+
+    def line(self, text: str) -> None:
+        with self.lock:
+            if self.shown:
+                self.out.write("\r\x1b[K")
+                self.shown = False
+            self.out.write(text + "\n")
+            self.out.flush()
+
+    def meter(self, text: str) -> None:
+        now = time.time()
+        if not self.tty or now - self.last < 0.1:
+            return
+        with self.lock:
+            self.out.write("\r\x1b[K" + text)
+            self.out.flush()
+            self.shown, self.last = True, now
+
+    def clear(self) -> None:
+        with self.lock:
+            if self.shown:
+                self.out.write("\r\x1b[K")
+                self.out.flush()
+                self.shown = False
+
+
+def meter(level: float, threshold: float, state: str = "", width: int = 24) -> str:
+    """`mic [#####·····|········] 1234/900 REC` on a log scale; `|` marks the speech threshold."""
+    def pos(v: float) -> int:
+        return min(width - 1, max(0, int(math.log10(max(v, 1.0)) / 4.0 * width)))
+    bar = ["#" if i <= pos(level) and level >= 1 else "·" for i in range(width)]
+    bar[pos(threshold)] = "|"
+    return f"mic [{''.join(bar)}] {level:5.0f}/{threshold:.0f} {state}".rstrip()
+
+
+class Link:
+    """Talks to Thor. Says once when Thor goes away and once when it is back, instead of spamming errors."""
+
+    def __init__(self, thor: str, console: Console):
+        self.thor, self.console = thor.rstrip("/"), console
+        self.up: bool | None = None
+
+    def _mark(self, ok: bool, err: Exception | None = None) -> None:
+        if ok and self.up is False:
+            self.console.line("[thor] reconnected")
+        elif not ok and self.up is not False:
+            self.console.line(f"[thor] unreachable ({err}); retrying quietly")
+        self.up = ok
+
+    def call(self, path: str, body: dict | None = None, timeout: float = 30.0, retry_s: float = 0.0) -> dict:
+        deadline = time.time() + retry_s
+        while True:
+            try:
+                out = request_json(self.thor + path, body, timeout=timeout)
+                self._mark(True)
+                return out
+            except (urllib.error.HTTPError, NotLocal):
+                self._mark(True)
+                raise
+            except Exception as e:
+                self._mark(False, e)
+                if time.time() >= deadline:
+                    raise
+                time.sleep(0.5)
+
+
+class Timing:
+    """Remembers when you stopped talking so the reply can report how long it took."""
+
+    def __init__(self):
+        self.ended_at: float | None = None
+
+    def ended(self, t: float) -> None:
+        self.ended_at = t
+
+    def reply_started(self, now: float | None = None) -> float | None:
+        if self.ended_at is None:
+            return None
+        dt, self.ended_at = (now or time.time()) - self.ended_at, None
+        return dt
+
+
+def resync(seq: int, current: int) -> int:
+    """After Thor restarts with a fresh journal its seq starts over; follow it down so new replies aren't skipped."""
+    return min(seq, current)
 
 
 class Speaker:
     """Plays Thor's replies with `say`. While it speaks, the mic is ignored (no echo)."""
 
-    def __init__(self, thor: str, voice: str | None):
-        self.thor, self.voice = thor, voice
+    def __init__(self, link: Link, timing: Timing, voice: str | None = None, rate: int | None = None):
+        self.link, self.timing, self.voice, self.rate = link, timing, voice, rate
         self.busy_until = 0.0
 
     def busy(self) -> bool:
         return time.time() < self.busy_until
 
+    def command(self, text: str) -> list:
+        return (["say"] + (["-v", self.voice] if self.voice else []) + (["-r", str(self.rate)] if self.rate else [])
+                + [text])
+
     def run(self) -> None:
-        seq = get(f"{self.thor}/api/headset/outbox?after=-1")["seq"]
+        seq = None
         while True:
             try:
-                out = get(f"{self.thor}/api/headset/outbox?after={seq}", timeout=30)
-            except Exception as e:
-                print(f"[speaker] {e}; retrying")
+                current = self.link.call("/api/headset/outbox?after=-1", timeout=10)["seq"]
+                seq = current if seq is None else resync(seq, current)
+                while True:
+                    out = self.link.call(f"/api/headset/outbox?after={seq}", timeout=30)
+                    seq = out["seq"]
+                    for item in out["items"]:
+                        self.play(item)
+            except Exception:
                 time.sleep(1)
-                continue
-            seq = out["seq"]
-            for item in out["items"]:
-                print(f"journeyman: {item['text']}")
-                self.busy_until = time.time() + 600
-                cmd = ["say"] + (["-v", self.voice] if self.voice else []) + [item["text"]]
-                subprocess.run(cmd, check=False)
-                self.busy_until = time.time() + 0.4
-                try:
-                    post(f"{self.thor}/api/headset/said", {"id": item["id"]})
-                except Exception:
-                    pass
+
+    def play(self, item: dict) -> None:
+        dt = self.timing.reply_started()
+        took = f"   [{dt:.1f}s after you stopped]" if dt is not None else ""
+        self.link.console.line(f"journeyman: {item['text']}{took}")
+        self.busy_until = time.time() + 600
+        try:
+            subprocess.run(self.command(item["text"]), check=False)
+        except FileNotFoundError:
+            pass
+        self.busy_until = time.time() + 0.4
+        try:
+            self.link.call("/api/headset/said", {"id": item["id"]}, timeout=5)
+        except Exception:
+            pass
 
 
 def to_wav(samples) -> bytes:
@@ -75,76 +192,147 @@ def to_wav(samples) -> bytes:
     return buf.getvalue()
 
 
-def listen(thor: str, speaker: Speaker, args) -> None:
-    import numpy as np
+def send_clip(link: Link, timing: Timing, samples, speech_end: float, note: str = "") -> None:
+    seconds = len(samples) / RATE
+    t0 = speech_end - seconds
+    timing.ended(speech_end)
+    try:
+        link.call("/api/headset/utterance", {"wav_b64": base64.b64encode(to_wav(samples)).decode(),
+                                             "t0": t0, "t1": speech_end}, retry_s=5)
+        link.console.line(f"[sent {seconds:.1f}s of speech{note}]")
+    except Exception as e:
+        timing.ended_at = None
+        link.console.line(f"[send failed, {seconds:.1f}s dropped] {e}")
+
+
+def pick_device(spec: str | None):
+    if spec is None:
+        return None
+    return int(spec) if spec.isdigit() else spec
+
+
+def list_devices() -> None:
     import sounddevice as sd
+    print(sd.query_devices())
+    print("\nuse --device <number> or --device <part of the name>; `>` marks the default input")
 
-    print("calibrating noise for 1 s, stay quiet...")
-    noise = sd.rec(RATE, samplerate=RATE, channels=1, dtype="int16")
-    sd.wait()
-    floor = float(np.sqrt(np.mean(noise.astype(np.float32) ** 2))) or 50.0
-    threshold = args.threshold or max(300.0, floor * 3.0)
-    print(f"listening (noise {floor:.0f}, threshold {threshold:.0f}). Ctrl-C to quit.")
 
-    pre_roll, voiced, silent, blocks, started_at = [], 0, 0, [], None
-    with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=BLOCK) as stream:
+def listen(link: Link, speaker: Speaker, timing: Timing, args) -> None:
+    import sounddevice as sd
+    from vad import Vad
+
+    con = link.console
+    vad = Vad(threshold=args.threshold, rate=RATE, end_silence_s=args.end_silence, max_s=args.max_seconds)
+    with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=BLOCK,
+                        device=pick_device(args.device)) as stream:
+        if args.threshold is None:
+            con.line("calibrating room noise for 1 s, stay quiet...")
+            noise, _ = stream.read(RATE)
+            vad.calibrate(noise[:, 0])
+        con.line(f"listening (noise {vad.floor:.0f}, threshold {vad.threshold:.0f}). "
+                 "Too loud in here? restart with --ptt. Ctrl-C to quit.")
         while True:
             block, _ = stream.read(BLOCK)
             block = block[:, 0].copy()
             if speaker.busy():
-                pre_roll, voiced, blocks, started_at = [], 0, [], None
+                vad.reset()
+                con.meter(meter(0, vad.threshold, "(journeyman speaking)"))
                 continue
-            level = float(np.sqrt(np.mean(block.astype(np.float32) ** 2)))
-            loud = level > threshold
-            if started_at is None:
-                pre_roll = (pre_roll + [block])[-10:]
-                voiced = voiced + 1 if loud else 0
-                if voiced >= 5:
-                    started_at, blocks, silent = time.time() - 0.45, list(pre_roll), 0
+            utt = vad.feed(block)
+            con.meter(meter(vad.level, vad.threshold, "REC" if vad.active else ""))
+            if utt is not None:
+                note = ", cut at --max-seconds" if utt.cut else ""
+                threading.Thread(target=send_clip, args=(link, timing, utt.samples, time.time() - utt.silence_s, note),
+                                 daemon=True).start()
+
+
+def push_to_talk(link: Link, speaker: Speaker, timing: Timing, args) -> None:
+    import numpy as np
+    import sounddevice as sd
+    from vad import rms
+
+    con = link.console
+    rec = {"on": False, "blocks": []}
+    max_n = int(args.max_seconds * RATE)
+
+    def callback(indata, frames, t, status):
+        if rec["on"]:
+            block = indata[:, 0].copy()
+            rec["blocks"].append(block)
+            con.meter(meter(rms(block), args.threshold or 300.0, "REC — Enter to send"))
+
+    with sd.InputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=BLOCK,
+                        device=pick_device(args.device), callback=callback):
+        con.line("push-to-talk: Enter starts recording, Enter again sends. Ctrl-C to quit.")
+        while True:
+            input()
+            if speaker.busy():
+                con.line("(journeyman is still talking; recording anyway)")
+            rec["blocks"], rec["on"] = [], True
+            con.line("recording... Enter to send")
+            input()
+            rec["on"] = False
+            end = time.time()
+            con.clear()
+            blocks = rec["blocks"]
+            if not blocks:
+                con.line("[nothing recorded]")
                 continue
-            blocks.append(block)
-            silent = 0 if loud else silent + 1
-            too_long = time.time() - started_at > args.max_seconds
-            if silent * BLOCK / RATE >= args.end_silence or too_long:
-                t1 = time.time()
-                wav = to_wav(np.concatenate(blocks))
-                threading.Thread(target=send_clip, args=(thor, wav, started_at, t1), daemon=True).start()
-                pre_roll, voiced, blocks, started_at = [], 0, [], None
+            samples = np.concatenate(blocks)
+            note = ""
+            if len(samples) > max_n:
+                samples, note = samples[:max_n], f", cut to first {args.max_seconds:.0f}s"
+            threading.Thread(target=send_clip, args=(link, timing, samples, end, note), daemon=True).start()
 
 
-def send_clip(thor: str, wav: bytes, t0: float, t1: float) -> None:
-    try:
-        post(f"{thor}/api/headset/utterance", {"wav_b64": base64.b64encode(wav).decode(), "t0": t0, "t1": t1})
-        print(f"[sent {t1 - t0:.1f}s of speech]")
-    except Exception as e:
-        print(f"[send failed] {e}")
-
-
-def type_loop(thor: str) -> None:
+def type_loop(link: Link, timing: Timing) -> None:
     print("type what you'd say; Enter sends. Ctrl-C to quit.")
     while True:
         text = input("> ").strip()
         if text:
             now = time.time()
-            post(f"{thor}/api/headset/utterance", {"text": text, "t0": now, "t1": now})
+            timing.ended(now)
+            try:
+                link.call("/api/headset/utterance", {"text": text, "t0": now, "t1": now}, retry_s=5)
+            except Exception as e:
+                timing.ended_at = None
+                print(f"[send failed] {e}")
 
 
-def main() -> None:
+def main(argv: list | None = None) -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--thor", default="http://192.168.55.1:3000", help="journeyman service URL on Thor")
     p.add_argument("--text", action="store_true", help="type instead of talking")
+    p.add_argument("--ptt", action="store_true", help="push-to-talk: Enter starts, Enter stops (for loud rooms)")
+    p.add_argument("--list-devices", action="store_true", help="list audio devices and exit")
+    p.add_argument("--device", help="mic to use: number or part of the name from --list-devices")
     p.add_argument("--voice", help="macOS voice for `say`, e.g. Samantha")
-    p.add_argument("--threshold", type=float, help="speech loudness threshold (default: 3x room noise)")
+    p.add_argument("--rate", type=int, help="speaking rate for `say`, words per minute (e.g. 200)")
+    p.add_argument("--threshold", type=float, help="speech loudness threshold (default: 3x room noise, adaptive)")
     p.add_argument("--end-silence", type=float, default=0.8, help="seconds of quiet that end an utterance")
     p.add_argument("--max-seconds", type=float, default=15.0, help="longest clip sent (Gemma's limit is 30)")
-    args = p.parse_args()
-    thor = args.thor.rstrip("/")
-    print(f"journeyman status: {post(thor + '/api/ops/status', {})['result']['mode']}")
-    speaker = Speaker(thor, args.voice)
+    args = p.parse_args(argv)
+    if args.list_devices:
+        return list_devices()
+    console = Console()
+    link = Link(args.thor, console)
+    try:
+        mode = link.call("/api/ops/status", {}, timeout=5)["result"]["mode"]
+        console.line(f"journeyman status: {mode}")
+    except Exception:
+        console.line(f"Thor at {link.thor} isn't answering yet; carrying on, will connect when it's up")
+    timing = Timing()
+    speaker = Speaker(link, timing, args.voice, args.rate)
     threading.Thread(target=speaker.run, daemon=True).start()
     try:
-        type_loop(thor) if args.text else listen(thor, speaker, args)
+        if args.text:
+            type_loop(link, timing)
+        elif args.ptt:
+            push_to_talk(link, speaker, timing, args)
+        else:
+            listen(link, speaker, timing, args)
     except (KeyboardInterrupt, EOFError):
+        console.clear()
         print()
 
 
