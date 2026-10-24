@@ -28,6 +28,9 @@ class State:
         self.procedure: str | None = None
         self.teach_index = 0
         self.pending_question: dict | None = None
+        self.hero: dict | None = None
+        self.observed: dict | None = None
+        self._hero_kind: str | None = None
         self.last_seq = 0
 
     # ---- reads -------------------------------------------------------
@@ -42,8 +45,11 @@ class State:
         s = self.session()
         return [u for u in (s["transcript"] if s else []) if u["t1"] >= since]
 
+    def latest_frame_id(self) -> str | None:
+        return next(reversed(self.frames), None) if self.frames else None
+
     def snapshot(self) -> dict:
-        return {
+        snap = {
             "seq": self.last_seq, "mode": self.mode, "session_id": self.session_id,
             "procedure": self.procedure, "teach_index": self.teach_index,
             "pending_question": self.pending_question,
@@ -53,6 +59,8 @@ class State:
             "gaps": self.gaps[-20:], "said": self.said[-20:], "notes": self.notes[-20:],
             "frames": list(self.frames.values())[-12:],
         }
+        snap.update(hero=self.hero, observed=self.observed, voice_state=getattr(self, "voice_state", None))
+        return snap
 
     # ---- the one write path -------------------------------------------
     def apply(self, event: dict) -> None:
@@ -66,6 +74,7 @@ class State:
             }
             self.mode, self.session_id, self.procedure = d["kind"], d["session_id"], d["procedure"]
             self.teach_index, self.pending_question = 0, None
+            self.hero, self.observed, self._hero_kind = None, None, None
             self._ensure_procedure(d["procedure"], t)
         elif kind == "session_ended":
             s = self.sessions.get(d["session_id"])
@@ -80,12 +89,16 @@ class State:
         elif kind == "frame_kept":
             self.frames[d["frame_id"]] = {"id": d["frame_id"], "path": d["path"], "t": d.get("at", t)}
             if len(self.frames) > 600:
-                self.frames.pop(next(iter(self.frames)))
+                pinned = {st.get("frame_id") for st in self.steps.values()}
+                old = next((f for f in self.frames if f not in pinned), None)
+                if old:
+                    self.frames.pop(old)
         elif kind == "gap_noticed":
             self.gaps.append({**d, "t": t})
         elif kind == "question_asked":
             self.questions[d["question_id"]] = {**d, "t": t, "answer": None}
             self.pending_question = {**d, "t": t}
+            self._hero_kind = "asking"
         elif kind == "answer_attached":
             q = self.questions.get(d["question_id"])
             if q:
@@ -101,9 +114,14 @@ class State:
                         "whys": [], "warnings": [], "mistakes": 0, "rev": 0, "confirmed": False, "created": t}
                 proc["steps"].append(d["step_id"])
                 self.steps[d["step_id"]] = step
-            for key in ("title", "action", "cue", "frame_id", "source"):
+            for key in ("title", "action", "cue", "source"):
                 if d.get(key) is not None:
                     step[key] = d[key]
+            fid = d.get("frame_id")
+            if self.frames and fid not in self.frames:
+                fid = None if step.get("frame_id") in self.frames else self.latest_frame_id()
+            if fid:
+                step["frame_id"] = fid
             step["rev"] += 1
             self.procedures[d["procedure"]]["rev"] += 1
         elif kind == "why_saved":
@@ -149,10 +167,15 @@ class State:
                 if d["detail"] not in step["warnings"]:
                     step["warnings"].append(d["detail"])
                 step["rev"] += 1
+            self._hero_kind = "correcting"
         elif kind == "lesson_saved":
             self.lessons.append({"text": d["text"], "t": t})
         elif kind == "said":
             self.said.append({"text": d["text"], "say_id": d["say_id"], "t": t})
+            self.hero = {"text": d["text"], "kind": self._hero_kind or "instructing", "t": t}
+            self._hero_kind = None
+        elif kind == "observed":
+            self.observed = {"text": d["text"], "frame_id": d.get("frame_id"), "source": d.get("source"), "t": t}
         elif kind == "note":
             self.notes.append({**d, "t": t})
 

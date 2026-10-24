@@ -134,4 +134,7 @@ class Eyes:
         result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=200)
         result.setdefault("answer", "")
         result["frames"], result["seconds"] = len(frames), round(secs, 2)
+        if isinstance(result["answer"], str) and result["answer"].strip():
+            fid = result.get("frame_id") if result.get("frame_id") in [f["id"] for f in frames] else frames[-1]["id"]
+            self.core.emit("observed", text=result["answer"].strip(), frame_id=fid, source="look")
         return result

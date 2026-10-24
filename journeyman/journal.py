@@ -13,6 +13,7 @@ EVENT_TYPES = {
     "question_asked", "answer_attached", "step_saved", "why_saved", "item_confirmed",
     "item_corrected", "question_logged", "disagreement_flagged", "trainee_step_done",
     "trainee_mistake", "teach_moved", "lesson_saved", "said", "note",
+    "observed",
 }
 
 
