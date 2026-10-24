@@ -5,6 +5,7 @@ import re
 
 from . import ops
 
+LOOK_DOWN = "My camera check isn't answering right now. Say done again and I'll try once more."
 LOOK_PROMPT = "Has this step been done: {title}? Judge it from the most recent frame. Look for: {cue}."
 
 
@@ -111,10 +112,12 @@ class TeachMixin:
         if not self.core.eyes.recent(10):
             return None
         cue = st.get("cue") or st.get("action") or st.get("title")
+        self._look_failed = False
         try:
             return self.core.eyes.look(LOOK_PROMPT.format(title=st.get("title"), cue=str(cue).rstrip(".")), 10).get("yes")
         except Exception as e:
-            self.core.note("warn", f"look failed: {e}")
+            self.core.note("warn", f"camera check failed: {e}")
+            self._look_failed = True
             return None
 
     def teach_check(self) -> None:
@@ -125,7 +128,8 @@ class TeachMixin:
         retried = getattr(self, "_teach_retry", None) == st["id"]
         if verdict is None and not retried:
             self._teach_retry = st["id"]
-            self.core.say("I can't quite tell from here. Hold it up to the camera and say done again.")
+            self.core.say(LOOK_DOWN if getattr(self, "_look_failed", False) else
+                          "I can't quite tell from here. Hold it up to the camera and say done again.")
             return
         self._teach_retry = None
         if verdict is False:

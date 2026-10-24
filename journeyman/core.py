@@ -35,10 +35,10 @@ class Core:
         self.state.voice_state = "listening"
         self.listeners: list = []
         self.journal.subscribe(self._on_event)
-        self.gemma = gemma or Gemma(self.config.gemma_url, self.config.gemma_model)
+        self.gemma = gemma or Gemma(self.config.gemma_url, self.config.gemma_model, self.config)
         self.vision = vision or (self.gemma if self.config.vision_url == self.config.gemma_url
                                  and self.config.vision_model == self.config.gemma_model
-                                 else Gemma(self.config.vision_url, self.config.vision_model))
+                                 else Gemma(self.config.vision_url, self.config.vision_model, self.config))
         self.eyes = Eyes(self)
         self.ears = Ears(self)
         self.agent = Agent(self)

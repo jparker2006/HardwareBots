@@ -8,10 +8,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import urllib.error
 
 from . import ops
-from .gemma import merge_roles, strip_control, tool_calls
+from .gemma import GemmaError, merge_roles, strip_control, tool_calls
 
 SYSTEM = """You are Journeyman, a voice instructor for hands-on technical work. You run entirely on a local device.
 You talk out loud, so every reply is one or two short spoken sentences. No lists, no markdown.
@@ -73,18 +72,18 @@ class Agent:
     def _chat(self, messages: list[dict], **kw) -> dict:
         if self.system_role == "merge":
             messages = merge_roles(messages)
-        msg, _ = self.core.gemma.chat(messages, **kw)
+        msg, _ = self.core.gemma.chat(messages, kind="agent", **kw)
         return msg or {}
 
     def respond(self, utterance: str) -> str:
         turn = Turn()
         try:
             reply = self._tool_loop(utterance, turn)
-        except urllib.error.HTTPError as e:
-            self.core.note("warn", f"tool calling failed ({e.code}); answering without tools")
-            return self.respond_without_tools(utterance, turn)
+        except GemmaError as e:
+            self.core.note("warn", f"tool calling failed, answering without tools: {e}")
+            return self.respond_without_tools(utterance, turn, use_model=e.code is not None)
         except FAILURES as e:
-            self.core.note("warn", f"Gemma call failed ({e}); answering without tools")
+            self.core.note("warn", f"answering without tools, Gemma failed: {e}")
             return self.respond_without_tools(utterance, turn)
         if is_question(utterance) and not turn.found:
             return self.respond_without_tools(utterance, turn)
@@ -136,11 +135,13 @@ class Agent:
         turn.ran.append(name)
         return result
 
-    def respond_without_tools(self, utterance: str, turn: Turn | None = None) -> str:
+    def respond_without_tools(self, utterance: str, turn: Turn | None = None, use_model: bool = True) -> str:
         turn = turn or Turn()
         found = ops.run(self.core, "search_knowledge", {"query": utterance})["matches"]
         if not found:
             return self._say(NOT_CAPTURED, utterance, turn)
+        if not use_model:
+            return self._say(self._from_knowledge(found), utterance, turn)
         try:
             msg = self._chat([
                 {"role": "system", "content": self._system()},
@@ -150,7 +151,7 @@ class Agent:
             ], max_tokens=150)
             reply = speakable(msg.get("content") or "")
         except FAILURES as e:
-            self.core.note("warn", f"Gemma call failed ({e}); reading saved knowledge aloud")
+            self.core.note("warn", f"reading saved knowledge aloud, Gemma failed: {e}")
             reply = ""
         return self._say(reply or self._from_knowledge(found), utterance, turn)
 
