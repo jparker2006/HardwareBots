@@ -116,10 +116,10 @@ class UiDataTest(unittest.TestCase):
         self.assertEqual(self.api_state()["hero"]["kind"], "instructing")
 
     def test_voice_state_is_passed_through_when_present(self):
-        self.assertIsNone(self.api_state()["voice_state"])
-        self.core.state.voice_state = "listening"
         self.assertEqual(self.api_state()["voice_state"], "listening")
-        self.assertEqual(ops.run(self.core, "status")["voice_state"], "listening")
+        self.core.state.voice_state = "speaking"
+        self.assertEqual(self.api_state()["voice_state"], "speaking")
+        self.assertEqual(ops.run(self.core, "status")["voice_state"], "speaking")
 
 
 if __name__ == "__main__":
