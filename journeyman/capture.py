@@ -149,8 +149,14 @@ class CaptureMixin:
             parts = self._frame_parts(frames, now)
             ids = [f["id"] for f in frames]
             content = parts + [text_part(OBSERVE_PROMPT.format(frame_ids=", ".join(ids), said=said_text, known=known))]
-            result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=500)
+            result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=500,
+                                                     kind="observe")
             steps, gaps = parse_observation(result, ids)
+            for item in steps + gaps:
+                item["frame_id"] = item["frame_id"] or ids[-1]
+            seen = [x["action"] for x in steps + gaps]
+            if seen:
+                self.core.emit("observed", text="; ".join(seen), frame_id=(steps + gaps)[0]["frame_id"], source="capture")
             for st in steps:
                 if any(ops.similar(st["action"], k.get("action", "")) >= 0.6 for k in self._steps()):
                     continue
@@ -168,7 +174,7 @@ class CaptureMixin:
                                    f"{len(steps)} steps, {len(gaps)} gaps")
             return result
         except Exception as e:
-            self.core.note("error", f"observe: {e}")
+            self.core.note("error", f"couldn't read the camera frames: {e}")
             return None
         finally:
             self._observing.release()
@@ -225,10 +231,11 @@ class CaptureMixin:
         try:
             msg, _ = self.core.gemma.chat([{"role": "user", "content": QUESTION_PROMPT.format(
                 expert=self.cfg.expert_name, action=action, said=" / ".join(said[-3:]) or "(nothing)")}],
-                max_tokens=40, temperature=0.4)
+                max_tokens=40, temperature=0.4, kind="question")
             lines = [x for x in (msg.get("content") or "").strip().splitlines() if x.strip()]
             question = lines[0].strip().strip('"*').strip() if lines else ""
-        except Exception:
+        except Exception as e:
+            self.core.note("warn", f"asked with a stock question, Gemma failed: {e}")
             question = ""
         if not question or len(question.split()) > 25:
             return f"Quick one: why {imperative(action).lower()}?"
@@ -250,8 +257,9 @@ class CaptureMixin:
         try:
             parsed, _ = self.core.gemma.ask_json([{"role": "user", "content": WHY_PROMPT.format(
                 question=q["text"], default=default["n"] if default else "?", answer=text, steps=listing)}],
-                max_tokens=150)
-        except Exception:
+                max_tokens=150, kind="why")
+        except Exception as e:
+            self.core.note("warn", f"saved the answer word for word, Gemma failed: {e}")
             parsed = {}
         if "why" in parsed and not _str(parsed.get("why")):
             self.core.note("info", f"not an answer, still waiting: {text}")

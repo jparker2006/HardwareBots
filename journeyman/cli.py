@@ -1,4 +1,4 @@
-"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/recordings/doctor/bench/eval are local."""
+"""`jm`: the CLI. Operations go to the running journeyman service; serve/replay/recordings/doctor/bench/eval/seed/reset/camera-test are local."""
 from __future__ import annotations
 
 import argparse
@@ -106,6 +106,67 @@ def cmd_eval(args):
     run(args.dir, cfg, tail_s=args.tail, everything=args.all)
 
 
+def service_up(url: str) -> bool:
+    try:
+        request_json(f"{url}/api/ops/status", {}, timeout=2)
+        return True
+    except Exception:
+        return False
+
+
+def cmd_seed(args):
+    """Write a known-good card with no model call: through the running service if up, else straight into JM_DATA."""
+    from . import demo
+    if service_up(args.url):
+        run, where = (lambda name, a: call(args.url, name, a)), args.url
+    else:
+        from .core import Core
+        core = Core(Config(), sync=True)
+        run, where = (lambda name, a: ops.run(core, name, a)), str(core.config.data_dir)
+    try:
+        r = demo.seed(run, demo.load_card(Path(args.recording)), confirm=not args.unconfirmed)
+    except demo.SeedError as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
+    print(f"seeded {r['procedure']}: {r['steps']} steps, {r['whys']} reasons"
+          f"{', confirmed' if r['confirmed'] else ', unconfirmed'}, into {where}")
+
+
+def cmd_reset(args):
+    from . import demo
+    if service_up(args.url):
+        print(f"journeyman is running at {args.url}. Stop `jm serve` first, then reset.", file=sys.stderr)
+        sys.exit(1)
+    data_dir = Config().data_dir
+    dest = demo.reset(data_dir)
+    print(f"archived {data_dir} to {dest}; starting clean" if dest else f"{data_dir} is already clean")
+    if args.seed:
+        cmd_seed(argparse.Namespace(url=args.url, recording=args.seed, unconfirmed=False))
+
+
+def cmd_camera_test(args):
+    from .eyes import camera_test
+    cfg = Config()
+    r = camera_test(args.device or cfg.camera, Path(args.out or cfg.data_dir / "camera-test.jpg"), frames=args.frames)
+    if args.json:
+        print(json.dumps(r, indent=2))
+    else:
+        for d in r["devices"]:
+            kind = "capture" if d.get("capture") else "metadata" if d.get("meta") else d.get("error", "other")
+            print(f"node     {d['device']:12} {kind:9} {d.get('card', '')} {','.join(d.get('formats') or [])}")
+        print(f"device   {r['device']} ({r.get('card') or 'unknown'})")
+        if r["ok"]:
+            print(f"format   {r['format']}  {r.get('caps') or ''}")
+            print(f"fps      negotiated {r.get('fps_negotiated')}  measured {r.get('fps_measured')} over {r['frames']} frames")
+            size = "x".join(map(str, r["snapshot_size"])) if r.get("snapshot_size") else "?"
+            print(f"saved    {r['snapshot']} ({r['snapshot_bytes']} bytes, {size})")
+        else:
+            print(f"FAIL     {r.get('error')}")
+            for a in r.get("attempts", []):
+                print(f"  tried {a['format']}: {a['frames']} frames, exit {a['exit']}: {a['stderr']}")
+    sys.exit(0 if r["ok"] else 1)
+
+
 def cmd_schema(_args):
     print(json.dumps(ops.tool_schemas(), indent=2))
 
@@ -140,6 +201,21 @@ def main(argv=None):
     e.add_argument("--tail", type=float, default=15.0, help="seconds to keep watching after the script ends")
     e.add_argument("--all", action="store_true", help="keep going after the capture session ends")
     e.set_defaults(fn=cmd_eval)
+    sd = sub.add_parser("seed", help="build a known-good procedure card from a recording, no model needed")
+    sd.add_argument("recording", help="a recording folder (uses its card.json if present) or a card .json file")
+    sd.add_argument("--unconfirmed", action="store_true", help="leave the steps unconfirmed")
+    sd.set_defaults(fn=cmd_seed)
+    rs = sub.add_parser("reset", help="archive JM_DATA to JM_DATA/archive/<time> and start clean")
+    rs.add_argument("--seed", metavar="RECORDING", help="seed this recording after the reset")
+    rs.set_defaults(fn=cmd_reset)
+
+
+    ct = sub.add_parser("camera-test", help="grab frames from the camera, save a JPEG, print device, format and fps")
+    ct.add_argument("--device", help="index, /dev/videoN or auto (default JM_CAMERA)")
+    ct.add_argument("--out", help="snapshot path (default $JM_DATA/camera-test.jpg)")
+    ct.add_argument("--frames", type=int, default=30)
+    ct.add_argument("--json", action="store_true", help="machine-readable output")
+    ct.set_defaults(fn=cmd_camera_test)
     sub.add_parser("schema", help="print the agent tool schemas").set_defaults(fn=cmd_schema)
     for o in ops.REGISTRY.values():
         sp = sub.add_parser(o.name.replace("_", "-"), help=o.help)

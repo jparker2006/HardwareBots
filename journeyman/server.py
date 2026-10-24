@@ -15,6 +15,9 @@ from . import ops
 from .recorder import Recorder
 
 UI = Path(__file__).parent / "ui" / "index.html"
+STATIC_TYPES = {".html": "text/html; charset=utf-8", ".css": "text/css", ".js": "text/javascript",
+                ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".woff2": "font/woff2",
+                ".woff": "font/woff", ".ttf": "font/ttf", ".json": "application/json", ".txt": "text/plain"}
 
 
 def make_handler(core):
@@ -47,6 +50,8 @@ def make_handler(core):
                 return self._send(403, {"error": "local clients only"})
             url = urlparse(self.path)
             q = parse_qs(url.query)
+            if url.path.startswith("/ui/"):
+                return self._static(url.path[len("/ui/"):])
             if url.path == "/":
                 return self._send(200, UI.read_bytes(), "text/html; charset=utf-8")
             if url.path == "/api/state":
@@ -84,6 +89,10 @@ def make_handler(core):
                     elif body.get("text"):
                         core.conductor.submit_text(body["text"], t0, t1)
                     return self._send(202, {"accepted": True, "id": body.get("id")})
+                if url.path == "/api/headset/voice":
+                    if body.get("state") == "hearing":
+                        core.voice.heard()
+                    return self._send(200, {"voice_state": core.state.voice_state})
                 if url.path == "/api/headset/said":
                     core.spoken(body.get("id", ""))
                     return self._send(200, {"ok": True})
@@ -95,6 +104,16 @@ def make_handler(core):
                 return self._send(400, {"error": str(e)})
             except Exception as e:
                 return self._send(500, {"error": f"{type(e).__name__}: {e}"})
+
+        def _static(self, rel: str):
+            root = UI.parent.resolve()
+            target = (root / rel).resolve()
+            if target.is_dir():
+                target = target / "index.html"
+            if root not in target.parents or not target.is_file():
+                return self._send(404, {"error": "not found"})
+            ctype = STATIC_TYPES.get(target.suffix.lower(), "application/octet-stream")
+            return self._send(200, target.read_bytes(), ctype)
 
         def _stream(self):
             self.send_response(200)

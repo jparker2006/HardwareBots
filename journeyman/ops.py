@@ -128,7 +128,8 @@ def status(core):
     return {"mode": s.mode, "session": s.session_id, "procedure": s.procedure,
             "procedures": {n: len(p["steps"]) for n, p in s.procedures.items()},
             "open_questions": len(s.open_questions), "questions_asked": len(s.questions), "pending_question": s.pending_question,
-            "camera": core.eyes.status(), "seq": s.last_seq}
+            "camera": core.eyes.status(), "seq": s.last_seq,
+            "hero": s.hero, "observed": s.observed, "voice_state": getattr(s, "voice_state", None)}
 
 
 @op("ls", "list", "List what exists under a path.", [Param("path", help="e.g. /procedures", required=False, default="/")])

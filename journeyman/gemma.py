@@ -2,44 +2,170 @@
 
 Servers differ in how tool calls come back: parsed into `tool_calls`, or left in `content` as JSON,
 a fenced block, or Gemma 4's native `<|tool_call>call:name{key:<|"|>value<|"|>}<tool_call|>` text.
-`tool_calls()` reads all of them."""
+`tool_calls()` reads all of them.
+
+Live hardening: each call has a kind (agent, observe, look, ears, question, why) with its own timeout;
+thinking is switched off and any thinking text is dropped before anyone reads the reply; response_format
+and chat_template_kwargs are dropped for good the first time the server rejects them; oversized and
+surplus images are left out. Failures raise GemmaError, whose message is plain enough for the screen."""
 from __future__ import annotations
 
 import base64
 import json
 import re
+import socket
+import threading
 import time
+import urllib.error
 
-from .local_http import request_json
+from .local_http import NotLocal, request_json
+
+THINKING = [re.compile(r"<\|channel>.*?(?:<channel\|>|$)", re.S), re.compile(r"<think>.*?(?:</think>|$)", re.S),
+            re.compile(r"<thought>.*?(?:</thought>|$)", re.S)]
+REASONING_KEYS = ("reasoning_content", "reasoning", "thinking")
+OPTIONAL = {"response_format": ("response_format", "json_object", "json_schema", "json mode", "guided"),
+            "chat_template_kwargs": ("chat_template_kwargs", "enable_thinking")}
+
+
+class GemmaError(OSError):
+    def __init__(self, text: str, code: int | None = None, kind: str = ""):
+        super().__init__(text)
+        self.code, self.kind = code, kind
+
+    def __str__(self) -> str:
+        return self.args[0]
 
 
 class Gemma:
-    def __init__(self, base_url: str, model: str = ""):
+    def __init__(self, base_url: str, model: str = "", config=None):
         self.base = base_url.rstrip("/")
         self._model = model
+        self.timeouts = dict(getattr(config, "timeouts", None) or {})
+        self.thinking = bool(getattr(config, "thinking", False))
+        self.json_mode = getattr(config, "json_mode", "auto")
+        self.max_images = int(getattr(config, "max_images", 6))
+        self.max_image_bytes = int(getattr(config, "max_image_kb", 512)) * 1024
+        self.unsupported: set[str] = set()
+        self._lock = threading.Lock()
+
+    def timeout(self, kind: str) -> float:
+        return float(self.timeouts.get(kind) or self.timeouts.get("default") or 60.0)
 
     @property
     def model(self) -> str:
         if not self._model:
-            self._model = request_json(self.base + "/models", timeout=10)["data"][0]["id"]
+            with self._lock:
+                if not self._model:
+                    self._model = self._post(self.base + "/models", None, 10, "models")["data"][0]["id"]
         return self._model
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
-             max_tokens: int = 400, temperature: float = 0.2) -> tuple[dict, float]:
-        body: dict = {"model": self.model, "messages": messages, "max_tokens": max_tokens,
-                      "temperature": temperature}
+             max_tokens: int = 400, temperature: float = 0.2, kind: str = "default") -> tuple[dict, float]:
+        body: dict = {"model": self.model, "messages": limit_images(messages, self.max_images, self.max_image_bytes),
+                      "max_tokens": max_tokens, "temperature": temperature}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
-        if json_mode:
+        if json_mode and self.json_mode != "off":
             body["response_format"] = {"type": "json_object"}
+        if not self.thinking:
+            body["chat_template_kwargs"] = {"enable_thinking": False}
         start = time.time()
-        out = request_json(self.base + "/chat/completions", body)
-        return out["choices"][0]["message"], time.time() - start
+        while True:
+            for key in self.unsupported:
+                body.pop(key, None)
+            try:
+                out = self._post(self.base + "/chat/completions", body, self.timeout(kind), kind)
+                break
+            except GemmaError as e:
+                key = self._rejected(e, body)
+                if not key:
+                    raise
+                self.unsupported.add(key)
+        try:
+            msg = dict(out["choices"][0]["message"] or {})
+        except (KeyError, IndexError, TypeError):
+            raise GemmaError(f"Gemma sent a reply with no message ({kind})", kind=kind)
+        return without_thinking(msg), time.time() - start
 
-    def ask_json(self, messages: list[dict], max_tokens: int = 500) -> tuple[dict, float]:
-        msg, secs = self.chat(messages, json_mode=True, max_tokens=max_tokens)
-        return extract_json(msg.get("content") or ""), secs
+    def ask_json(self, messages: list[dict], max_tokens: int = 500, kind: str = "default") -> tuple[dict, float]:
+        msg, secs = self.chat(messages, json_mode=True, max_tokens=max_tokens, kind=kind)
+        return extract_json(flat_text(msg.get("content"))), secs
+
+    def _rejected(self, e: GemmaError, body: dict) -> str | None:
+        if e.code not in (400, 404, 415, 422, 500, 501):
+            return None
+        low = str(e).lower()
+        for key, words in OPTIONAL.items():
+            if key in body and any(w in low for w in words):
+                return key
+        if e.code in (400, 422) and "response_format" in body and self.json_mode == "auto" \
+                and not re.search(r"image|audio|token|context|length|tool", low):
+            return "response_format"
+        return None
+
+    def _post(self, url: str, body: dict | None, timeout: float, kind: str) -> dict:
+        what = f"Gemma ({kind})" if kind != "default" else "Gemma"
+        try:
+            return request_json(url, body, timeout=timeout)
+        except NotLocal:
+            raise
+        except urllib.error.HTTPError as e:
+            try:
+                detail = json.loads(e.read() or b"{}")
+                detail = detail.get("error", detail)
+                detail = detail.get("message", detail) if isinstance(detail, dict) else detail
+            except (ValueError, OSError, AttributeError):
+                detail = e.reason
+            raise GemmaError(f"{what} refused the request ({e.code}): {str(detail)[:160]}", e.code, kind)
+        except (socket.timeout, TimeoutError):
+            raise GemmaError(f"{what} took longer than {timeout:.0f}s, gave up", kind=kind)
+        except urllib.error.URLError as e:
+            if isinstance(e.reason, (socket.timeout, TimeoutError)):
+                raise GemmaError(f"{what} took longer than {timeout:.0f}s, gave up", kind=kind)
+            raise GemmaError(f"can't reach Gemma at {self.base}; is the server running? ({e.reason})", kind=kind)
+        except ConnectionError as e:
+            raise GemmaError(f"lost the connection to Gemma at {self.base} ({e})", kind=kind)
+        except ValueError:
+            raise GemmaError(f"{what} sent back something that isn't JSON", kind=kind)
+
+
+def without_thinking(msg: dict) -> dict:
+    """The reply with reasoning fields and any thinking text taken out of content."""
+    for key in REASONING_KEYS:
+        msg.pop(key, None)
+    content = msg.get("content")
+    if isinstance(content, list):
+        content = flat_text(content)
+    if isinstance(content, str):
+        for pattern in THINKING:
+            content = pattern.sub(" ", content)
+        msg["content"] = content.rpartition("</think>")[2].strip()
+    return msg
+
+
+def limit_images(messages: list[dict], most: int, max_bytes: int) -> list[dict]:
+    """Keeps the newest `most` images under `max_bytes` each; the rest become a short text note."""
+    seen = 0
+    out = []
+    for m in reversed(messages):
+        content = m.get("content")
+        if not isinstance(content, list):
+            out.append(m)
+            continue
+        parts = []
+        for p in reversed(content):
+            if isinstance(p, dict) and p.get("type") == "image_url":
+                url = (p.get("image_url") or {}).get("url", "")
+                if len(url) * 3 // 4 > max_bytes:
+                    p = text_part("(frame left out: too large)")
+                elif seen >= most:
+                    p = text_part("(frame left out)")
+                else:
+                    seen += 1
+            parts.append(p)
+        out.append(dict(m, content=parts[::-1]))
+    return out[::-1]
 
 
 def text_part(text: str) -> dict:

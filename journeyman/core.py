@@ -15,6 +15,7 @@ from .gemma import Gemma
 from .journal import Journal
 from .local_http import check_url
 from .state import State
+from .voice import Voice
 
 CARD_EVENTS = {"step_saved", "why_saved", "item_confirmed", "item_corrected", "question_logged",
                "trainee_mistake", "disagreement_flagged"}
@@ -31,12 +32,13 @@ class Core:
         self.journal = Journal(self.config.journal_path)
         for event in self.journal.read():
             self.state.apply(event)
+        self.state.voice_state = "listening"
         self.listeners: list = []
         self.journal.subscribe(self._on_event)
-        self.gemma = gemma or Gemma(self.config.gemma_url, self.config.gemma_model)
+        self.gemma = gemma or Gemma(self.config.gemma_url, self.config.gemma_model, self.config)
         self.vision = vision or (self.gemma if self.config.vision_url == self.config.gemma_url
                                  and self.config.vision_model == self.config.gemma_model
-                                 else Gemma(self.config.vision_url, self.config.vision_model))
+                                 else Gemma(self.config.vision_url, self.config.vision_model, self.config))
         self.eyes = Eyes(self)
         self.ears = Ears(self)
         self.agent = Agent(self)
@@ -44,10 +46,12 @@ class Core:
         self.outbox: list[dict] = []
         self.outbox_cv = threading.Condition()
         self._speaking_until = 0.0
+        self.voice = Voice(self)
 
     def start(self) -> None:
         self.eyes.start()
         self.conductor.start()
+        self.voice.start()
 
     # ---- events ---------------------------------------------------------
     def emit(self, type_: str, **data) -> dict:
@@ -72,6 +76,7 @@ class Core:
         say_id = uuid.uuid4().hex[:8]
         self.emit("said", say_id=say_id, text=text)
         self._speaking_until = time.time() + 1.0 + 0.07 * len(text)
+        self.voice.spoke()
         with self.outbox_cv:
             self.outbox.append({"id": say_id, "seq": self.state.last_seq, "text": text})
             self.outbox = self.outbox[-50:]

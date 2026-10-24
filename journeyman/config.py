@@ -1,3 +1,4 @@
+"""Settings, all from JM_* environment variables. Timeouts are per call kind: JM_TIMEOUT_<KIND> seconds."""
 from __future__ import annotations
 
 import os
@@ -7,6 +8,13 @@ from pathlib import Path
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name, default)
+
+
+TIMEOUTS = {"default": 60, "agent": 45, "observe": 60, "look": 25, "ears": 20, "question": 15, "why": 20}
+
+
+def _timeouts() -> dict:
+    return {k: float(_env("JM_TIMEOUT_" + k.upper(), str(v))) for k, v in TIMEOUTS.items()}
 
 
 @dataclass
@@ -27,7 +35,13 @@ class Config:
     gap_confidence: float = field(default_factory=lambda: float(_env("JM_GAP_CONFIDENCE", "0.6")))
     max_tool_calls: int = field(default_factory=lambda: int(_env("JM_MAX_TOOL_CALLS", "4")))
     default_procedure: str = field(default_factory=lambda: _env("JM_PROCEDURE", "cable-swap"))
+    filler_after_s: float = field(default_factory=lambda: float(_env("JM_FILLER_AFTER", "4")))
     expert_name: str = field(default_factory=lambda: _env("JM_EXPERT", "the expert"))
+    timeouts: dict = field(default_factory=_timeouts)
+    thinking: bool = field(default_factory=lambda: _env("JM_THINKING", "off").lower() in ("on", "1", "true", "yes"))
+    json_mode: str = field(default_factory=lambda: _env("JM_JSON_MODE", "auto"))
+    max_images: int = field(default_factory=lambda: int(_env("JM_MAX_IMAGES", "6")))
+    max_image_kb: int = field(default_factory=lambda: int(_env("JM_MAX_IMAGE_KB", "512")))
 
     def __post_init__(self) -> None:
         self.data_dir = Path(self.data_dir)
