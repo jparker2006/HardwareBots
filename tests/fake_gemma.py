@@ -17,6 +17,17 @@ class Script:
         self.observe_calls = 0
         self.look_calls = 0
         self.requests: list[dict] = []
+        self.reject_audio = False
+        self.reject_images = False
+        self.text_tools = False
+
+    def rejects(self, body: dict) -> str:
+        parts = [p for m in body.get("messages", []) if isinstance(m.get("content"), list) for p in m["content"]]
+        if self.reject_audio and any(p.get("type") == "input_audio" for p in parts):
+            return "audio input is not supported by this model"
+        if self.reject_images and any(p.get("type") == "image_url" for p in parts):
+            return "image input is not supported by this model"
+        return ""
 
     def reply(self, body: dict) -> dict:
         self.requests.append(body)
@@ -42,6 +53,8 @@ class Script:
             self.look_calls += 1
             return {"content": json.dumps({"answer": "not yet" if self.look_calls == 1 else "yes",
                                            "yes": self.look_calls != 1, "frame_id": None})}
+        if body.get("tools") and self.text_tools:
+            return {"content": "I can't call tools."}
         if body.get("tools"):
             if last["role"] == "user":
                 return {"content": "", "tool_calls": [{"id": "c1", "type": "function", "function": {
@@ -64,9 +77,9 @@ def start() -> tuple[ThreadingHTTPServer, Script, str]:
         def log_message(self, *a):
             pass
 
-        def _json(self, obj):
+        def _json(self, obj, code=200):
             data = json.dumps(obj).encode()
-            self.send_response(200)
+            self.send_response(code)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
@@ -77,6 +90,9 @@ def start() -> tuple[ThreadingHTTPServer, Script, str]:
 
         def do_POST(self):
             body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            error = script.rejects(body)
+            if error:
+                return self._json({"error": {"message": error}}, 400)
             msg = {"role": "assistant", **script.reply(body)}
             self._json({"choices": [{"message": msg}]})
 

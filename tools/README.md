@@ -1,3 +1,14 @@
+# Bring-up checklist: `jm doctor`
+
+Run this first on Thor (or the Mac). One line per check: PASS / WARN / FAIL plus what to do next. Exit code 0 only if nothing FAILed.
+```sh
+./jm doctor                 # Python, Gemma server (JM_GEMMA_URL, else probes :8000 vLLM, :8080 llama.cpp, :11434 Ollama),
+                            # text / image / audio / tool calling, camera, journeyman service, internet, disk
+./jm doctor --offline       # demo mode: internet reachable is a FAIL
+./jm doctor --json          # machine output
+./jm bench --runs 5         # median and min per probe; built-in JPEG and WAV unless --image / --wav given
+```
+
 # Gemma timing probe
 
 Measures how fast and how accurately the local Gemma server answers one image question and one short audio clip. It's a measurement tool, not project code. Python 3 standard library only.
