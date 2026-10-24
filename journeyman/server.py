@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import ipaddress
 import json
+import os
 import queue
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,6 +12,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from . import ops
+from .recorder import Recorder
 
 UI = Path(__file__).parent / "ui" / "index.html"
 
@@ -121,6 +123,8 @@ def make_handler(core):
 
 
 def serve(core) -> None:
+    if os.environ.get("JM_RECORD", "1") != "0":
+        Recorder(core)
     core.start()
     server = ThreadingHTTPServer((core.config.host, core.config.port), make_handler(core))
     server.daemon_threads = True
