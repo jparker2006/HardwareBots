@@ -133,7 +133,8 @@ class TeachMixin:
             why = _sentence(whys[0]["why"]) if whys else ""
             ops.run(self.core, "log_trainee", {"step": st["id"], "kind": "mistake", "detail": self._slip(st)})
             reason = f" {self.cfg.expert_name}'s reason: {why}" if why else ""
-            self.core.say(f"Hold on, {self._title(st)} isn't done yet.{reason}")
+            title = self._title(st)
+            self.core.say(f"Hold on, {title[:1].lower() + title[1:]} isn't done yet.{reason}")
             return
         if verdict is None:
             self.core.note("warn", f"accepted {st['id']} without a camera check")

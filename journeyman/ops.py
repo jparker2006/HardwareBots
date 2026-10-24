@@ -231,6 +231,8 @@ def save_why(core, step, why, consequence=None, source="expert"):
 @op("log_question", "change", "Queue a question nobody has answered yet for the expert's next session.",
     [Param("question"), Param("asked_by", required=False, default="trainee")], agent=True)
 def log_question(core, question, asked_by="trainee"):
+    question = re.sub(r"^\s*(hey\s+)?journeyman[\s,:.!]*", "", question, flags=re.I).strip()
+    question = question[:1].upper() + question[1:]
     for q in core.state.open_questions.values():
         if similar(q["question"], question) >= 0.8:
             return {"question_id": q["question_id"], "duplicate": True}
