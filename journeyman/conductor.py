@@ -16,6 +16,11 @@ COMMANDS = [
     ("end", r"\b(i'?m done|end (the )?session|that'?s it|stop (the )?session|we'?re done)\b"),
     ("next", r"^\W*(okay |ok |alright )?(next|done|finished|got it|ready)\W*$"),
     ("confirm", r"^\W*(yes|yep|correct|that'?s right)\W*(save it|confirm)?\W*$"),
+    ("teach_repeat", r"^\W*(can you |could you |please )?(repeat( that| it)?|say (that|it) again|again|come again)\W*(please)?\W*$"),
+    ("teach_back", r"^\W*(go )?(back|previous)( (a |one )?step)?( please)?\W*$"),
+    ("teach_skip", r"^\W*(let'?s )?skip( (it|this|that|this one|this step))?( please)?\W*$"),
+    ("teach_left", r"\bhow many (more )?(steps )?(are )?(left|to go|remaining|more)\b"),
+    ("teach_whats_next", r"\b(what'?s next|what (is|comes) next|what do i do next)\b"),
 ]
 
 
@@ -66,8 +71,7 @@ class Conductor(CaptureMixin, TeachMixin):
         if kind == "capture":
             self.core.say(f"Saved {len(steps)} step{'s' if len(steps) != 1 else ''} and {whys} reason{'s' if whys != 1 else ''} for {name}.")
         else:
-            mistakes = len(s.sessions[sid]["mistakes"])
-            self.core.say(f"Session over. {mistakes} slip{'s' if mistakes != 1 else ''} logged, and the card is updated.")
+            self.core.say(self._teach_summary(sid))
         return sid
 
     # ---- input ------------------------------------------------------------
@@ -138,6 +142,8 @@ class Conductor(CaptureMixin, TeachMixin):
         elif s.mode == "teach":
             if cmd == "next":
                 self.teach_check()
+            elif cmd and cmd.startswith("teach_"):
+                self.teach_command(cmd)
             elif self._addressed(text) or "?" in text or re.match(r"^\s*(why|how|what|where|when|which|should)\b", text.lower()):
                 self.core.agent.respond(text)
         elif self._addressed(text):

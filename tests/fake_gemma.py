@@ -16,6 +16,7 @@ class Script:
     def __init__(self):
         self.observe_calls = 0
         self.look_calls = 0
+        self.look_answers: list = []
         self.requests: list[dict] = []
 
     def reply(self, body: dict) -> dict:
@@ -40,6 +41,10 @@ class Script:
                                            "consequence": "someone unplugs the wrong server"})}
         if "Has this step been done" in text:
             self.look_calls += 1
+            if self.look_answers:
+                yes = self.look_answers.pop(0)
+                return {"content": json.dumps({"answer": "can't tell" if yes is None else str(yes), "yes": yes,
+                                               "frame_id": None})}
             return {"content": json.dumps({"answer": "not yet" if self.look_calls == 1 else "yes",
                                            "yes": self.look_calls != 1, "frame_id": None})}
         if body.get("tools"):

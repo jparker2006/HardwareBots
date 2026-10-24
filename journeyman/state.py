@@ -135,6 +135,9 @@ class State:
                 s["done_steps"].append(d["step_id"])
             if self.session_id == d["session_id"]:
                 self.teach_index += 1
+        elif kind == "teach_moved":
+            if self.session_id == d["session_id"]:
+                self.teach_index = d["index"]
         elif kind == "trainee_mistake":
             s = self.sessions.get(d["session_id"])
             if s:
