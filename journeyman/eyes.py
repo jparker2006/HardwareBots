@@ -131,7 +131,7 @@ class Eyes:
         content = self.images(frames) + [text_part(
             f"Question about these camera frames (oldest first): {question}\n"
             'Reply only JSON: {"answer": "<one sentence>", "yes": true|false|null, "frame_id": "<best frame id or null>"}')]
-        result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=200)
+        result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=200, kind="look")
         result.setdefault("answer", "")
         result["frames"], result["seconds"] = len(frames), round(secs, 2)
         return result
