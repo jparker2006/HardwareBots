@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#09090d">
+<title>Journeyman · live session</title>
+<link rel="stylesheet" href="./terminal.css"><script src="./terminal.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#procedure">Skip to procedure</a>
+<div class="terminal">
+<header>
+  <div class="masthead"><a class="brand" href="./">journeyman<span class="sigil">_</span></a><span class="local">runs on this device · no cloud</span><span id="link" role="status">link: connecting</span></div>
+  <div class="command"><span class="path">~/journeyman</span> <span class="sigil">$</span> <span id="command">idle</span><span id="session" class="session"></span></div>
+</header>
+<main>
+<section class="output" aria-labelledby="output-label">
+  <div class="speech"><div class="kicker" id="output-label">stdout / journeyman <span id="kind">waiting</span></div><h1 id="hero" aria-live="polite"><span id="spoken" aria-hidden="true">Waiting for session</span><span class="cursor" aria-hidden="true">▍</span></h1></div>
+  <div class="voice"><canvas id="orb" width="448" height="224" aria-hidden="true"></canvas><div class="voice-label"><span class="path">voice /</span> <span id="voice-state" role="status">—</span></div></div>
+</section>
+<div class="workspace">
+  <div class="left-pane">
+    <section class="camera-pane" aria-labelledby="camera-heading"><h2 class="pane-head" id="camera-heading"><span><span class="path">01</span> camera</span><span id="feed-state" class="dim">no feed</span></h2><div class="camera-box"><img id="camera" alt="Live workbench camera" hidden><div id="no-camera">[ waiting for camera ]</div><span class="camera-corner" aria-hidden="true">└ view / latest</span></div><p class="observed"><span class="path">Observed:</span> <span id="observed">not captured</span></p></section>
+    <section class="log-pane" aria-labelledby="log-heading"><h2 class="pane-head" id="log-heading"><span><span class="path">02</span> session.log</span><span class="dim">heard / said</span></h2><div id="log" class="log" tabindex="0" aria-label="Session transcript"><p class="empty">[ no transcript ]</p></div></section>
+  </div>
+  <section id="procedure" class="document-pane" aria-labelledby="procedure-heading" tabindex="-1"><h2 class="pane-head" id="procedure-heading"><span><span class="path">03</span> procedure.md</span><span id="revision" class="dim">—</span></h2><div class="document-scroll"><div class="doc-title"><span class="kicker">procedure / <span id="doc-mode">idle</span></span><h3 id="procedure-name">No procedure</h3><div id="progress" hidden><div class="progress-track"><i id="progress-fill"></i></div><span id="progress-label"></span></div></div><div id="steps"><p class="empty">[ no steps captured ]</p></div><section class="questions"><h3 class="kicker">open questions <span id="question-count">00</span></h3><div id="questions"><p class="empty">[ none ]</p></div></section></div><section class="learned"><h3 class="kicker" id="learned-label">learned this session</h3><div id="counts" class="counts"></div></section></section>
+</div>
+</main>
+<footer><span class="footer-brand">[ jm ]</span><span id="health">camera: — · latency: —</span><a href="/api/state">state ↗</a></footer>
+</div>
+</body>
+</html>
