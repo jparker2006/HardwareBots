@@ -21,13 +21,29 @@ from tests import fake_gemma  # noqa: E402
 
 
 class UITest(unittest.TestCase):
-    def test_page_is_offline_and_uses_the_core_api(self):
-        html = UI.read_text()
-        self.assertIsNone(re.search(r"https?://|//cdn|@import|@font-face|url\(", html))
+    def test_index_redirects_to_the_demo_page(self):
+        self.assertIn("/ui/demo/", UI.read_text())
+
+    def test_final_page_is_offline_and_uses_the_core_api(self):
+        final = UI.parent / "final"
+        text = "".join((final / n).read_text() for n in ("index.html", "app.js", "style.css", "planet.js", "ascii.js", "qr.js"))
+        self.assertIsNone(re.search(r"https?://(?!github\.com/jparker2006)|//cdn|@import", text))
+        self.assertEqual(re.findall(r"url\(([^)]*)\)", text),
+                         ["'./fonts/geist.woff2'", "'./fonts/jetbrains-mono.woff2'", "'./fonts/newsreader.woff2'"])
         for needle in ("/api/state", "/api/events", "/api/ops/status", "/api/frame/latest.jpg", "/api/frames/",
-                       "CAPTURING EXPERT", "TEACHING NEW HIRE", "IDLE", "no cloud", "UNCONFIRMED",
-                       "Common mistake", "slips caught", "open questions"):
-            self.assertIn(needle, html)
+                       "/api/headset/utterance", "no cloud", "unconfirmed", "common mistake", "slips caught",
+                       "open questions", "voice_state", "showModal"):
+            self.assertIn(needle, text)
+
+    def test_demo_assets_are_offline(self):
+        demo = UI.parent / "demo"
+        text = "".join((demo / name).read_text() for name in
+                       ("index.html", "app.js", "style.css", "planet.js", "ascii.js"))
+        self.assertIsNone(re.search(r"https?://(?!github\.com/jparker2006)|//cdn|@import", text))
+        for asset in re.findall(r"url\(['\"]?([^)'\"]+)", text):
+            self.assertTrue((demo / asset).is_file(), asset)
+        for endpoint in ("/api/state", "/api/events", "/api/frame/latest.jpg", "/api/headset/utterance"):
+            self.assertIn(endpoint, text)
 
     def test_served_page_and_session_counters(self):
         server, _script, url = fake_gemma.start()
@@ -37,7 +53,11 @@ class UITest(unittest.TestCase):
         threading.Thread(target=ui.serve_forever, daemon=True).start()
         self.addCleanup(ui.shutdown)
         base = f"http://127.0.0.1:{ui.server_port}"
-        self.assertIn(b"JOURNEYMAN", urlopen(base + "/").read())
+        self.assertIn(b"/ui/demo/", urlopen(base + "/").read())
+        for path in ("/ui/demo/", "/ui/demo/app.js", "/ui/demo/style.css", "/ui/demo/planet.js",
+                     "/ui/demo/ascii.js", "/ui/final/", "/ui/final/app.js", "/ui/final/qr.js", "/ui/final/fonts/geist.woff2"):
+            self.assertEqual(urlopen(base + path).status, 200)
+        urlopen(base + "/api/headset/utterance", json.dumps({"text": "typed fallback"}).encode())
         ops.run(core, "session_start", {"kind": "capture"})
         ops.run(core, "save_step", {"title": "Label both ends", "action": "labels the cable"})
         ops.run(core, "save_why", {"step": "1", "why": "so it can be traced"})
