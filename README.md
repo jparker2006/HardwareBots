@@ -16,33 +16,31 @@ Journeyman turns a senior tech's hands-on work into skills: for people today, ro
 ```
 
 ## Run it
+One person can run the whole demo. The minute-by-minute run sheet and a fallback for each failure: [docs/DEMO.md](docs/DEMO.md).
 
-### 1. Thor: start Gemma
-Gemma has to serve an OpenAI-compatible API. Audio input needs vLLM and the E2B or E4B model. Jetson AI Lab's command:
+### 1. Thor: Gemma + Journeyman, one command
 ```sh
-sudo docker run -it --rm --pull always --runtime=nvidia --network host \
-  -v $HOME/.cache/huggingface:/root/.cache/huggingface \
-  ghcr.io/nvidia-ai-iot/vllm:gemma4-jetson-thor \
-  vllm serve google/gemma-4-E4B-it --enable-auto-tool-choice --reasoning-parser gemma4 --tool-call-parser gemma4
+git clone https://github.com/jparker2006/Journeyman.git && cd Journeyman
+scripts/thor-up.sh --only-31b     # vLLM Gemma 4 31B NVFP4 (text + image), jm doctor, then jm serve with the camera
+source /tmp/journeyman/env.sh     # the settings thor-up chose, for later ./jm commands
 ```
-Check it with `python3 tools/gemma_probe.py http://localhost:8000/v1 photo.jpg clip.wav` (see [tools/README.md](tools/README.md)).
+`scripts/thor-up.sh` with no option also starts Gemma 4 E4B (audio) if it is on Thor. Without E4B there is no audio input, so use the headset with `--text`. `scripts/thor-up.sh --dry-run` prints the commands; `scripts/thor-down.sh` stops everything. Details: [scripts/README.md](scripts/README.md). Open `http://localhost:3000` on the monitor; `./jm doctor` checks Gemma, the camera and whether you are offline.
 
-### 2. Thor: start Journeyman
+### 2. Mac: the headset
 ```sh
-git clone https://github.com/jparker2006/Journeyman.git && cd journeyman
-python3 -c "import cv2" || pip3 install opencv-python   # camera; GStreamer is used if OpenCV is missing
-JM_GEMMA_URL=http://localhost:8000/v1 ./jm serve
+git clone https://github.com/jparker2006/Journeyman.git && cd Journeyman
+python3 headset/headset.py --text    # type; replies are spoken on the Mac. Needs nothing installed
+pip3 install sounddevice numpy && python3 headset/headset.py    # talk (needs E4B on Thor)
 ```
-Open `http://localhost:3000` on the monitor. `./jm doctor` checks Gemma, the camera, and whether you are offline.
+It finds Thor at `192.168.55.1` (USB-C link) or `192.168.3.131` (venue Wi-Fi). Pin one with `--thor http://<address>:3000`.
 
-### 3. Mac: start the headset
+### 3. Seed and reset
 ```sh
-git clone https://github.com/jparker2006/Journeyman.git && cd journeyman
-pip3 install sounddevice numpy
-python3 headset/headset.py --thor http://192.168.55.1:3000          # talk
-python3 headset/headset.py --thor http://192.168.55.1:3000 --text   # or type
+./jm seed recordings/demo            # load the rehearsed cable-swap card (no model needed); refuses if the card has steps
+./jm reset                           # archive data/ to data/archive/<time>/ and start clean; stop jm serve first
+./jm reset --seed recordings/demo    # both
 ```
-`192.168.55.1` is the usual address of a Jetson over the USB-C link. Use whatever address reaches your Thor.
+Stop and restart the service around a reset: `kill $(cat /tmp/journeyman/serve.pid)`, reset, then `scripts/thor-up.sh --only-31b --no-doctor` (it reuses the running model).
 
 ## Talk to it
 | Say | What happens |
