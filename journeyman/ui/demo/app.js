@@ -9,12 +9,13 @@ const ACTIONS = {
   capture: [['■ I’m done', "Journeyman, I'm done", 'say “I’m done” to save it']],
   teach:   [['Next step →', 'next', 'say “next” · “I’m done” to finish'], ['■ End', "Journeyman, I'm done"]],
 };
-let skew = 0, clockFrom = null;
+let skew = 0, clockFrom = null, waiting = null, lastMode = 'idle';
 const clock = secs => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
 function tickTimer() { $('timer').textContent = clockFrom ? clock(Math.max(0, Date.now() / 1000 + skew - clockFrom)) : ''; }
 setInterval(tickTimer, 1000);
 function render(s) {
   const teach = s.mode === 'teach', capture = s.mode === 'capture', idle = !teach && !capture;
+  lastMode = s.mode || 'idle';
   if (s.now) skew = s.now - Date.now() / 1000;
   const all = Object.values(s.sessions || {});
   const session = s.sessions?.[s.session_id] || all.at(-1);
@@ -44,6 +45,11 @@ function render(s) {
     b.disabled = id === 'secondary' && idle && !steps.length;
   }
   $('primary').className = capture ? 'stop' : '';
+  // Ending a capture reviews the last frames first; hold the button until the mode actually changes.
+  if (waiting && waiting.mode === (s.mode || 'idle') && Date.now() < waiting.until) {
+    $('primary').disabled = $('secondary').disabled = true;
+    $('primary').textContent = capture ? 'Saving…' : teach ? 'One moment…' : 'Starting…';
+  } else waiting = null;
   $('hint').textContent = `or ${primary[2]}`;
   // Never paraphrase, truncate or type out the spoken line: judges see it immediately.
   const spoken = s.hero?.text ?? s.said?.at(-1)?.text ?? '';
@@ -87,8 +93,10 @@ async function send(text) {
   if (!r.ok) throw Error(r.status);
 }
 for (const id of ['primary', 'secondary']) $(id).addEventListener('click', async e => {
-  const b = e.currentTarget; b.disabled = true;
-  try { await send(b.dataset.say); } catch { $('hint').textContent = 'Could not reach Journeyman. Try again.'; }
+  const b = e.currentTarget, say = b.dataset.say;
+  waiting = say === 'next' ? null : {mode: lastMode, until: Date.now() + 30000};
+  b.disabled = true;
+  try { await send(say); } catch { waiting = null; $('hint').textContent = 'Could not reach Journeyman. Try again.'; }
   finally { setTimeout(() => { b.disabled = false; refresh(); }, 600); }
 });
 async function refresh() {
