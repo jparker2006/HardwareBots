@@ -153,3 +153,29 @@ class FakeGstTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ProbeIoctlTest(unittest.TestCase):
+    def test_querycap_reads_the_mutated_buffer_like_real_ioctl(self):
+        import struct
+        from unittest import mock
+        from journeyman import eyes
+
+        def fake_ioctl(fd, req, arg, mutate=True):
+            if isinstance(arg, bytearray):  # real fcntl.ioctl mutates the buffer and returns an int
+                arg[16:16 + 9] = b"Brio 100\0"
+                struct.pack_into("<II", arg, 84, eyes.CAP_DEVICE_CAPS | eyes.CAP_VIDEO_CAPTURE, eyes.CAP_VIDEO_CAPTURE)
+                return 0
+            index = struct.unpack_from("<I", arg, 0)[0]
+            if index > 0:
+                raise OSError("no more formats")
+            out = bytearray(arg)
+            out[44:48] = b"MJPG"
+            return bytes(out)
+
+        with mock.patch.object(eyes.os, "open", return_value=99), mock.patch.object(eyes.os, "close"), \
+                mock.patch.object(eyes.fcntl, "ioctl", side_effect=fake_ioctl):
+            info = eyes.probe("/dev/video0")
+        self.assertEqual(info["card"], "Brio 100")
+        self.assertTrue(info["capture"])
+        self.assertEqual(info["formats"], ["MJPG"])

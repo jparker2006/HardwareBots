@@ -44,7 +44,8 @@ def probe(device: str) -> dict:
         info["error"] = e.strerror or str(e)
         return info
     try:
-        buf = fcntl.ioctl(fd, VIDIOC_QUERYCAP, bytearray(104))
+        buf = bytearray(104)
+        fcntl.ioctl(fd, VIDIOC_QUERYCAP, buf, True)
         card = bytes(buf[16:48]).split(b"\0")[0].decode(errors="replace")
         caps, dev_caps = struct.unpack_from("<II", buf, 84)
         caps = dev_caps if caps & CAP_DEVICE_CAPS else caps
