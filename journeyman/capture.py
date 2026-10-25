@@ -156,7 +156,8 @@ class CaptureMixin:
         try:
             s, now = self.core.state, self.clock()
             prev = self.last_observe_at
-            since = prev - 2
+            start = getattr(self, "retry_from", None) or prev
+            since = start - 2
             self.last_observe_at, self.observed_seq = now, s.last_seq
             frames = [f for f in s.frames.values() if f["t"] >= since]
             most = max(1, min(6, self.cfg.max_images))
@@ -197,8 +198,10 @@ class CaptureMixin:
                 self.candidates = self.candidates[-MAX_CANDIDATES:]
             self.core.note("info", f"observed {len(frames)} frames in {secs:.1f}s: "
                                    f"{len(steps)} steps, {len(gaps)} gaps")
+            self.retry_from = None
             return result
         except Exception as e:
+            self.retry_from = start
             self.core.note("error", f"couldn't read the camera frames: {e}")
             return None
         finally:

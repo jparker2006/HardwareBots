@@ -86,6 +86,17 @@ class CaptureTest(unittest.TestCase):
         self.assertIn(f"Frames (oldest first): {frame_id}", text)
         self.assertIn("I pull the old cable out", text)
 
+    def test_failed_observe_resends_its_frames_next_time(self):
+        self.core.eyes.ingest(JPEG)
+        self.c.clock = lambda: time.time() + 30
+        with mock.patch.object(self.core.vision, "ask_json", side_effect=RuntimeError("took longer than 60s")):
+            self.c.observe(force=True)
+        first = next(iter(self.core.state.frames))
+        self.c.observe(force=True)
+        text = " ".join(p.get("text", "") for p in self.script.requests[-1]["messages"][-1]["content"]
+                        if p["type"] == "text")
+        self.assertIn(f"Frame {first}", text)
+
     def test_no_repeat_steps(self):
         step = {"title": "Unplug the old cable", "action": "unplugs the old network cable"}
         self.observe({"new_steps": [step], "unexplained": []})

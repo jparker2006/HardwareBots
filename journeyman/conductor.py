@@ -42,6 +42,7 @@ class Conductor(CaptureMixin, TeachMixin):
         self.last_utterance_end = 0.0
         self.last_question_at = 0.0
         self.last_observe_at = 0.0
+        self.retry_from: float | None = None
         self.observed_seq = 0
         self.candidates: list[dict] = []
         self.asked_actions: list[str] = []
@@ -59,7 +60,7 @@ class Conductor(CaptureMixin, TeachMixin):
         name = procedure or self.core.state.procedure or self.cfg.default_procedure
         self.core.emit("session_started", session_id=sid, kind=kind, procedure=name, trainee=trainee)
         self.candidates, self.asked_actions = [], []
-        self.last_observe_at = time.time()
+        self.last_observe_at, self.retry_from = time.time(), None
         self.observed_seq = self.core.state.last_seq
         if kind == "capture":
             self.core.say(f"Recording {name}. Work as you normally would and talk me through it.")
