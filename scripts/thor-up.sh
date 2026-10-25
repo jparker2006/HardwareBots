@@ -9,8 +9,9 @@
 #   scripts/thor-up.sh --no-serve      models only;  --no-doctor  skip `jm doctor`
 #
 # Settings (env): JM_31B_DIR, JM_E4B_MODEL, JM_E4B_DIR, JM_HF_CACHE, JM_31B_PORT (8001), JM_E4B_PORT (8000),
-# JM_31B_MEM (0.50), JM_E4B_MEM (0.25), JM_MAX_LEN (8192), JM_31B_ARGS, JM_E4B_ARGS, JM_VLLM_IMAGE, JM_DOCKER,
-# JM_VLLM_HOST (127.0.0.1), JM_UP_TIMEOUT (1200 s per model), JM_RUN_DIR (/tmp/journeyman), JM_CAMERA (0), JM_PORT (3000), HF_TOKEN.
+# JM_31B_MEM (0.50), JM_E4B_MEM (0.25), JM_MAX_LEN (8192), JM_31B_KV (bfloat16), JM_31B_ARGS, JM_E4B_ARGS, JM_DOCKER_ARGS,
+# JM_VLLM_IMAGE, JM_DOCKER, JM_VLLM_HOST (127.0.0.1), JM_UP_TIMEOUT (1200 s per model), JM_DROP_CACHES (1),
+# JM_RUN_DIR (/tmp/journeyman), JM_CAMERA (0), JM_PORT (3000), HF_TOKEN. Known startup errors: docs/VLLM-THOR.md.
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -36,7 +37,7 @@ for a in "$@"; do
     --only-e4b) WANT31=0 ;;
     --no-serve) SERVE=0 ;;
     --no-doctor) DOCTOR=0 ;;
-    -h|--help) sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) echo "unknown option: $a (try --help)" >&2; exit 2 ;;
   esac
 done
@@ -69,6 +70,16 @@ e4b_cached() {
   ls "$HF_CACHE/hub/models--$(echo "$E4B_MODEL" | sed 's#/#--#g')"/snapshots/*/config.json >/dev/null 2>&1
 }
 
+# Thor's GPU shares RAM with the page cache; vLLM refuses to start if "free" memory is below its share.
+drop_caches() {
+  [ "${JM_DROP_CACHES:-1}" = 1 ] || return 0
+  if [ "$DRY" = 1 ]; then say "+ sync; echo 3 | sudo tee /proc/sys/vm/drop_caches"; return 0; fi
+  sync
+  if [ -w /proc/sys/vm/drop_caches ]; then echo 3 > /proc/sys/vm/drop_caches
+  else echo 3 | sudo tee /proc/sys/vm/drop_caches >/dev/null 2>&1
+  fi || say "WARN  could not drop the page cache (needs sudo); if vLLM says free memory is too low, run: sudo sysctl -w vm.drop_caches=3"
+}
+
 running() {
   [ "$($DOCKER inspect -f '{{.State.Running}}' "$1" 2>/dev/null)" = "true" ]
 }
@@ -82,9 +93,10 @@ start_vllm() {
     return
   fi
   [ "$DRY" = 0 ] && $DOCKER rm -f "$name" >/dev/null 2>&1
+  drop_caches
   # shellcheck disable=SC2086
   set -- $DOCKER run -d --name "$name" --runtime=nvidia --network host --ipc host \
-    -v "$HF_CACHE:/root/.cache/huggingface" "$@" "$IMAGE" \
+    -v "$HF_CACHE:/root/.cache/huggingface" ${JM_DOCKER_ARGS:-} "$@" "$IMAGE" \
     vllm serve "$model" --served-model-name "$served" --host "$VLLM_HOST" --port "$port" \
     --gpu-memory-utilization "$mem" --max-model-len "$MAX_LEN" $TOOL_FLAGS $extra
   if [ "$DRY" = 1 ]; then say "+ $*"; return 0; fi
@@ -126,7 +138,8 @@ if [ "$WANT31" = 1 ]; then
   else
     say "      31B: $DIR31 on :$P31"
     # shellcheck disable=SC2086
-    start_vllm jm-gemma-31b "$P31" "${JM_31B_MEM:-0.50}" gemma-4-31b "/models/$(basename "$DIR31")" "${JM_31B_ARGS:-}" \
+    start_vllm jm-gemma-31b "$P31" "${JM_31B_MEM:-0.50}" gemma-4-31b "/models/$(basename "$DIR31")" \
+      "--kv-cache-dtype ${JM_31B_KV:-bfloat16} ${JM_31B_ARGS:-}" \
       -v "$DIR31:/models/$(basename "$DIR31"):ro" \
       && wait_models jm-gemma-31b "http://127.0.0.1:$P31/v1" gemma-4-31b && UP31=1
   fi
