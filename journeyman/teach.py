@@ -4,6 +4,7 @@ from __future__ import annotations
 import re
 
 from . import ops
+from .capture import scene_talk
 
 LOOK_DOWN = "My camera check isn't answering right now. Say done again and I'll try once more."
 LOOK_PROMPT = "Has this step been done: {title}? Judge it from the most recent frame. Look for: {cue}."
@@ -47,11 +48,11 @@ class TeachMixin:
         title = str(st.get("title") or st["id"]).rstrip(".")
         line = f"Step {st['n']} of {len(self._steps())}: {title}."
         action = (st.get("action") or "").strip().rstrip(".")
-        if action and ops.similar(action, title) < 0.6:
+        if action and ops.similar(action, title) < 0.6 and not scene_talk(action):
             verb = action.split()[0].lower()
             who = f"{self.cfg.expert_name} " if verb.endswith("s") and not verb.endswith("ss") else ""
             line += f" {who}{action}."
-        if st.get("cue"):
+        if st.get("cue") and not scene_talk(st["cue"]):
             line += f" You're looking for: {str(st['cue']).rstrip('.')}."
         if st["warnings"]:
             line += f" Heads up, a common mistake here: {str(st['warnings'][-1]).rstrip('.')}."
@@ -111,7 +112,7 @@ class TeachMixin:
     def _look(self, st: dict):
         if not self.core.eyes.recent(10):
             return None
-        cue = st.get("cue") or st.get("action") or st.get("title")
+        cue = next((x for x in (st.get("cue"), st.get("action")) if x and not scene_talk(x)), st.get("title"))
         self._look_failed = False
         try:
             return self.core.eyes.look(LOOK_PROMPT.format(title=st.get("title"), cue=str(cue).rstrip(".")), 10).get("yes")

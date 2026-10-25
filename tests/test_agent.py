@@ -116,6 +116,15 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(self.said(), [NOT_CAPTURED])
         self.assertEqual(len(self.core.state.open_questions), 1)
 
+    def test_why_about_a_step_with_no_reason_is_not_captured(self):
+        ops.run(self.core, "save_step", {"title": "Leave slack cable loop", "action": "leaves a slack loop in the cable"})
+        self.play(call("search_knowledge", {"query": "slack"}),
+                  {"content": "search_knowledge. The saved knowledge does not provide the reason for leaving slack."})
+        self.assertEqual(self.ask("Why do I leave slack in the cable?"), NOT_CAPTURED)
+        self.assertEqual(self.said(), [NOT_CAPTURED])
+        self.assertEqual([q["question"] for q in self.core.state.open_questions.values()],
+                         ["Why do I leave slack in the cable?"])
+
     def test_not_captured_logs_once(self):
         self.play(call("search_knowledge", {"query": "torque"}),
                   call("log_question", {"question": "What torque?"}), {"content": NOT_CAPTURED})
@@ -146,6 +155,10 @@ class AgentTest(unittest.TestCase):
     def test_helpers(self):
         self.assertEqual(speakable("## Step\n- **Pull** the `cable`.\n- Then [label](x) it."), "Step Pull the cable. Then label it.")
         self.assertEqual(speakable("<|channel>thought hmm<channel|>Yes.<turn|>"), "Yes.")
+        self.assertEqual(speakable("search_knowledge. Based on the saved knowledge, Alex says: keep slack."),
+                         "Alex says: keep slack.")
+        self.assertEqual(speakable("I'll call log_question(question='x'). Look for the green light."),
+                         "Look for the green light.")
         self.assertTrue(is_question("Journeyman, why label it"))
         self.assertFalse(is_question("Journeyman, save that"))
         self.assertEqual(tool_calls({"content": "call:log_question{question:<|\"|>a, b<|\"|>}"})[0]["arguments"],

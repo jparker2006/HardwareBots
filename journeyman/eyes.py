@@ -319,7 +319,7 @@ class Eyes:
             path = self.cfg.frames_dir / f"{frame_id}.jpg"
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(jpeg)
-            self.core.emit("frame_kept", frame_id=frame_id, path=str(path), at=now)
+            self.core.emit("frame_kept", frame_id=frame_id, path=str(path), at=now, still=small is not None and not changed)
             return frame_id
         return None
 
