@@ -57,13 +57,14 @@ def fetch_blob(base, repo, desc, out, state):
     if os.path.exists(path) and os.path.getsize(path) == desc["size"]:
         state["progress"].add(desc["size"])
         return
-    for attempt in range(8):
+    for attempt in range(30):
         try:
             have = os.path.getsize(path + ".part") if os.path.exists(path + ".part") else 0
             r = get(f"{base}/v2/{repo}/blobs/{digest}", state["token"], offset=have)
             if have and r.status != 206:
                 have = 0
-            state["progress"].add(have)
+            if attempt == 0:
+                state["progress"].add(have)
             with open(path + ".part", "ab" if have else "wb") as f:
                 while True:
                     chunk = r.read(1 << 20)
@@ -71,6 +72,12 @@ def fetch_blob(base, repo, desc, out, state):
                         break
                     f.write(chunk)
                     state["progress"].add(len(chunk))
+            got = os.path.getsize(path + ".part")
+            if got < desc["size"]:
+                raise IOError(f"connection ended early at {got / 1e9:.2f} of {desc['size'] / 1e9:.2f} GB, resuming")
+            if got > desc["size"]:
+                os.remove(path + ".part")
+                raise IOError("too many bytes, restarting this blob")
             h = hashlib.sha256()
             with open(path + ".part", "rb") as f:
                 for chunk in iter(lambda: f.read(1 << 22), b""):
