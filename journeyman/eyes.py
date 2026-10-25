@@ -347,16 +347,34 @@ class Eyes:
         return parts
 
     def look(self, question: str, seconds: float = 10) -> dict:
-        frames = self.recent(seconds)
+        frames = self.recent(seconds, limit=max(1, min(6, self.cfg.max_images)))
         if not frames:
             return {"answer": "I can't see anything right now.", "yes": None, "frames": 0}
-        content = self.images(frames) + [text_part(
-            f"Question about these camera frames (oldest first): {question}\n"
-            'Reply only JSON: {"answer": "<one sentence>", "yes": true|false|null, "frame_id": "<best frame id or null>"}')]
+        content = self.images(frames) + [text_part(f"Question about these camera frames (oldest first): {question}\n" + LOOK_REPLY)]
         result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=200, kind="look")
-        result.setdefault("answer", "")
+        result["yes"] = as_yes(result.get("yes"))
+        result["answer"] = caption(result.get("answer"), result["yes"])
         result["frames"], result["seconds"] = len(frames), round(secs, 2)
-        if isinstance(result["answer"], str) and result["answer"].strip():
-            fid = result.get("frame_id") if result.get("frame_id") in [f["id"] for f in frames] else frames[-1]["id"]
-            self.core.emit("observed", text=result["answer"].strip(), frame_id=fid, source="look")
+        fid = result.get("frame_id") if result.get("frame_id") in [f["id"] for f in frames] else frames[-1]["id"]
+        self.core.emit("observed", text=result["answer"], frame_id=fid, source="look")
         return result
+
+
+LOOK_REPLY = ('Reply only JSON: {"answer": "<short sentence, 5-12 words, saying what you see, e.g. '
+              '\'The cable is plugged into port 12.\'>", "yes": true|false|null, "frame_id": "<best frame id or null>"}')
+BARE = {"yes", "no", "true", "false", "null", "none", "y", "n", "maybe", "unknown", "can't tell", "cannot tell", "not yet",
+        "done", "not done", "yes it is", "no it isn't"}
+
+
+def as_yes(value):
+    if isinstance(value, bool) or value is None:
+        return value
+    return {"true": True, "yes": True, "false": False, "no": False}.get(str(value).strip().lower())
+
+
+def caption(answer, yes) -> str:
+    """A short sentence for the 'Observed:' line; a bare yes/no/True/False becomes a plain sentence."""
+    text = answer.strip() if isinstance(answer, str) else ""
+    if len(text.split()) < 2 or text.lower().strip(" .!") in BARE:
+        text = {True: "Yes, that looks done.", False: "No, that isn't done yet."}.get(yes, "I can't tell from the camera.")
+    return text[0].upper() + text[1:]

@@ -34,6 +34,8 @@ Recorded steps:
 Reply with JSON only: {{"gives_reason": true|false, "step": <number of the step the answer is about>, "why": "<their reason, in their own words>", "consequence": "<what goes wrong if skipped, in their words, or empty>"}}
 gives_reason is false when they only say what they are doing (like "now I pull the cable out") instead of why. Then use "why": ""."""
 
+COMPACT = "\nBe brief: one line of JSON, no spaces, at most 2 new_steps and 1 unexplained, each text under 8 words."
+
 REASON_WORDS = re.compile(r"\b(because|cause|so that|so the|so it|so i|so you|otherwise|in case|to make sure|"
                           r"to avoid|to keep|to stop|to prevent|or else|that way|reason)\b")
 CONTEXT_S = 30.0
@@ -139,8 +141,9 @@ class CaptureMixin:
             since = self.last_observe_at - 2
             self.last_observe_at, self.observed_seq = now, s.last_seq
             frames = [f for f in s.frames.values() if f["t"] >= since]
-            if len(frames) > 6:
-                frames = [frames[int(i * len(frames) / 5.0)] for i in range(5)] + [frames[-1]]
+            most = max(1, min(6, self.cfg.max_images))
+            if len(frames) > most:
+                frames = [frames[int(i * len(frames) / float(most - 1))] for i in range(most - 1)] + [frames[-1]]
             if not frames:
                 return None
             said = self._said(min(since, now - CONTEXT_S))
@@ -148,7 +151,8 @@ class CaptureMixin:
             known = "; ".join(f"{st['n']}. {st.get('title', '')}" for st in self._steps()) or "(none)"
             parts = self._frame_parts(frames, now)
             ids = [f["id"] for f in frames]
-            content = parts + [text_part(OBSERVE_PROMPT.format(frame_ids=", ".join(ids), said=said_text, known=known))]
+            prompt = OBSERVE_PROMPT.format(frame_ids=", ".join(ids), said=said_text, known=known)
+            content = parts + [text_part(prompt + (COMPACT if self.cfg.compact_json else ""))]
             result, secs = self.core.vision.ask_json([{"role": "user", "content": content}], max_tokens=500,
                                                      kind="observe")
             steps, gaps = parse_observation(result, ids)

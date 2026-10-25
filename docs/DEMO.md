@@ -13,7 +13,7 @@ scripts/thor-up.sh --only-31b        # vLLM Gemma 4 31B NVFP4 on :8001, jm docto
 source /tmp/journeyman/env.sh        # so later ./jm commands use the same settings
 ./jm doctor                          # Gemma model listed, service running, camera source shown
 ```
-- `--only-31b` because E4B (the audio model) isn't on Thor and can't be downloaded at the venue. Without it Gemma can't hear, so the headset runs with `--text`. If the E4B is cached on Thor, run `scripts/thor-up.sh` with no option, and voice works.
+- `--only-31b` because E4B (the audio model) isn't on Thor and can't be downloaded at the venue. The 31B can't hear, so speech is transcribed on the Mac instead: Gemma 4 E2B via LiteRT-LM (`--ears litert`, setup in `litert/README.md`). If that isn't set up, use `--text`.
 - `scripts/thor-up.sh --dry-run` prints every command without running anything. `scripts/thor-down.sh` stops it all.
 - `jm serve` logs to `/tmp/journeyman/serve.log`. Open `http://localhost:3000` full screen on the monitor.
 
@@ -27,9 +27,9 @@ kill $(cat /tmp/journeyman/serve.pid) && ./jm reset && scripts/thor-up.sh --only
 
 **Mac** (in the repo folder; text mode needs nothing installed):
 ```sh
-python3 headset/headset.py --text    # type; Journeyman's replies come out of the Mac speaker
-python3 headset/headset.py           # voice, only if the E4B is up (needs: pip3 install sounddevice numpy)
-python3 headset/headset.py --ptt     # voice in a loud room: Enter starts, Enter stops
+python3 headset/headset.py --ears litert          # voice: Gemma E2B on the Mac hears you (needs: pip3 install sounddevice numpy + litert/README.md)
+python3 headset/headset.py --ears litert --ptt    # voice in a loud room: Enter starts, Enter stops
+python3 headset/headset.py --text                 # type; Journeyman's replies come out of the Mac speaker
 ```
 Pin a fixed address with `--thor http://192.168.3.131:3000` if the auto-pick picks wrong. It should print `journeyman status: idle`.
 
@@ -43,7 +43,7 @@ In `--text` mode, Jake says each line out loud and types it as he goes (short li
 
 | Time | Do | Say / type | Expect |
 |---|---|---|---|
-| 0:00 | Point at the Thor, the monitor, the Mac | Hook: "Every shop has one person who just knows... It runs on this Thor. No cloud." | |
+| 0:00 | Point at the Thor, the monitor, the Mac | Hook: "Every shop has one person who just knows... It runs on this Thor and this Mac. No cloud." | |
 | 0:15 | | **"Journeyman, start capture."** | Monitor: capture mode |
 | 0:20 | Touch the labeled port | **"First I find the port by its label, not by counting."** | A step on the card |
 | 0:35 | **Label both ends of the new cable. Say nothing.** Big and slow, in frame. | (silence) | |
@@ -56,7 +56,7 @@ In `--text` mode, Jake says each line out loud and types it as he goes (short li
 | 1:25 | Judge does a step, nudge them to skip the labeling | **"Next."** | Camera check; the skipped labeling gets caught and named |
 | 1:55 | Judge | **"Why do I label both ends?"** | The answer, in Jake's words from 1:05 |
 | 2:15 | Judge | **"What torque do the screws need?"** | *"That's not captured yet. I'll ask the expert next session."* The question is queued on the monitor |
-| 2:40 | Point at the Thor and the card | Close: "Everything you saw ran on this Thor. No cloud. The judge's skip and the torque question are now on the card for next time." | |
+| 2:40 | Point at the Thor and the card | Close: "Everything you saw ran on this Thor and this Mac. No cloud. The judge's skip and the torque question are now on the card for next time." | |
 
 ## Fallback lines
 | Failure | Say | Do |

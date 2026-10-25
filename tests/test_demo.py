@@ -21,6 +21,7 @@ from journeyman.core import Core  # noqa: E402
 from journeyman.server import make_handler  # noqa: E402
 
 DEMO = Path(__file__).parent.parent / "recordings" / "demo"
+FRAMES = Path(__file__).parent.parent / "recordings" / "demo-frames"
 DEAD = "http://127.0.0.1:9"
 
 
@@ -74,6 +75,27 @@ class DemoTest(unittest.TestCase):
         self.assertIn("already has 4 steps", out)
         self.assertEqual(len(self.core().state.procedure_steps("cable-swap")), 4)
 
+    def test_seed_gives_every_step_a_photo(self):
+        code, out = jm("--url", DEAD, "seed", str(FRAMES))
+        self.assertEqual(code, 0, out)
+        self.assertIn("4 steps, 4 reasons, confirmed, 4 photos", out)
+        core = self.core()
+        steps = core.state.procedure_steps("cable-swap")
+        self.assertEqual(len(steps), 4)
+        self.assertEqual(len({s["frame_id"] for s in steps}), 4)
+        for st, name in zip(steps, ["02-find-port", "03-pull-old", "04-label-ends", "05-plug-slack"]):
+            self.assertEqual(Path(core.state.frames[st["frame_id"]]["path"]).read_bytes(),
+                             (FRAMES / "frames" / f"{name}.jpg").read_bytes())
+        self.assertIn("photos", jm("--url", DEAD, "reset", "--seed", str(FRAMES / "card.json"))[1])
+
+    def test_card_from_script_picks_the_frame_after_each_utterance(self):
+        card = demo.card_from_script(FRAMES)
+        got = [(s["title"], Path(s["frame"]).name) for s in card["steps"]]
+        self.assertEqual(got, [("Find the port by its label", "02-find-port.jpg"),
+                               ("Pull the old cable straight out", "03-pull-old.jpg"),
+                               ("New cable goes in", "06-done.jpg")])
+        self.assertTrue(card["steps"][1]["why"].startswith("So the next tech"))
+
     def test_seed_through_running_service_and_reset_refuses(self):
         core = self.core()
         ui = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(core))
@@ -86,6 +108,16 @@ class DemoTest(unittest.TestCase):
         self.assertIn(url, out)
         self.assertEqual(len(core.state.procedure_steps("cable-swap")), 4)
         self.assertFalse(any(s["confirmed"] for s in core.state.procedure_steps("cable-swap")))
+        self.assertFalse(any(s.get("frame_id") for s in core.state.procedure_steps("cable-swap")))
+        demo.reset(self.data)
+        core = self.core()
+        ui2 = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(core))
+        threading.Thread(target=ui2.serve_forever, daemon=True).start()
+        self.addCleanup(ui2.server_close)
+        self.addCleanup(ui2.shutdown)
+        code, out = jm("--url", f"http://127.0.0.1:{ui2.server_port}", "seed", str(FRAMES))
+        self.assertEqual(code, 0, out)
+        self.assertTrue(all(s["frame_id"] in core.state.frames for s in core.state.procedure_steps("cable-swap")))
         code, out = jm("--url", url, "reset")
         self.assertEqual(code, 1)
         self.assertIn("Stop `jm serve` first", out)
