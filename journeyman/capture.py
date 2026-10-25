@@ -31,8 +31,8 @@ WHY_PROMPT = """You asked the expert: "{question}" (about step {default}).
 They answered: "{answer}"
 Recorded steps:
 {steps}
-Reply with JSON only: {{"step": <number of the step the answer is about>, "why": "<their reason, in their own words>", "consequence": "<what goes wrong if skipped, in their words, or empty>"}}
-Use "why": "" if they did not give a reason."""
+Reply with JSON only: {{"gives_reason": true|false, "step": <number of the step the answer is about>, "why": "<their reason, in their own words>", "consequence": "<what goes wrong if skipped, in their words, or empty>"}}
+gives_reason is false when they only say what they are doing (like "now I pull the cable out") instead of why. Then use "why": ""."""
 
 REASON_WORDS = re.compile(r"\b(because|cause|so that|so the|so it|so i|so you|otherwise|in case|to make sure|"
                           r"to avoid|to keep|to stop|to prevent|or else|that way|reason)\b")
@@ -261,7 +261,7 @@ class CaptureMixin:
         except Exception as e:
             self.core.note("warn", f"saved the answer word for word, Gemma failed: {e}")
             parsed = {}
-        if "why" in parsed and not _str(parsed.get("why")):
+        if str(parsed.get("gives_reason")).lower() == "false" or "why" in parsed and not _str(parsed.get("why")):
             self.core.note("info", f"not an answer, still waiting: {text}")
             return
         step = default

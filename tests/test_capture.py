@@ -145,6 +145,14 @@ class CaptureTest(unittest.TestCase):
         self.assertIsNone(self.core.state.pending_question)
         self.assertTrue(any(st["whys"] for st in self.c._steps()))
 
+    def test_narration_echoed_as_why_is_not_an_answer(self):
+        self.observe(LABEL_GAP)
+        self.assertTrue(self.c.maybe_ask(time.time() + 2))
+        self.script.why_replies.append({"gives_reason": False, "step": 1, "why": "Now I pull the old cable straight out"})
+        self.c.submit_text("Now I pull the old cable straight out")
+        self.assertIsNotNone(self.core.state.pending_question)
+        self.assertFalse(any(st["whys"] for st in self.c._steps()))
+
 
 class EvalTest(unittest.TestCase):
     def setUp(self):
