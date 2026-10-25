@@ -7,7 +7,7 @@ a fenced block, or Gemma 4's native `<|tool_call>call:name{key:<|"|>value<|"|>}<
 Live hardening: each call has a kind (agent, observe, look, ears, question, why) with its own timeout;
 thinking is switched off (reasoning_effort "none" is the only switch Ollama /v1 honours) and any thinking
 text is dropped before anyone reads the reply; response_format, chat_template_kwargs and reasoning_effort are dropped for good the first time the server rejects them; oversized and
-surplus images are left out. Failures raise GemmaError, whose message is plain enough for the screen."""
+surplus images are left out; max_tokens is capped per kind (JM_MAX_TOKENS_<KIND>). Failures raise GemmaError, whose message is plain enough for the screen."""
 from __future__ import annotations
 
 import base64
@@ -46,6 +46,7 @@ class Gemma:
         self.json_mode = getattr(config, "json_mode", "auto")
         self.max_images = int(getattr(config, "max_images", 6))
         self.max_image_bytes = int(getattr(config, "max_image_kb", 512)) * 1024
+        self.max_tokens = dict(getattr(config, "max_tokens", None) or {})
         self.unsupported: set[str] = set()
         self._lock = threading.Lock()
 
@@ -62,8 +63,9 @@ class Gemma:
 
     def chat(self, messages: list[dict], tools: list[dict] | None = None, json_mode: bool = False,
              max_tokens: int = 400, temperature: float = 0.2, kind: str = "default") -> tuple[dict, float]:
+        cap = self.max_tokens.get(kind) or self.max_tokens.get("default")
         body: dict = {"model": self.model, "messages": limit_images(messages, self.max_images, self.max_image_bytes),
-                      "max_tokens": max_tokens, "temperature": temperature}
+                      "max_tokens": min(max_tokens, cap) if cap else max_tokens, "temperature": temperature}
         if tools:
             body["tools"] = tools
             body["tool_choice"] = "auto"
