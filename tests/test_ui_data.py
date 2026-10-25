@@ -104,13 +104,13 @@ class UiDataTest(unittest.TestCase):
         snap = self.api_state()
         self.assertEqual(snap["hero"]["kind"], "instructing")
         self.assertIn("Step 2 of 2", snap["hero"]["text"])
-        self.assertEqual(snap["observed"], {"text": "True", "frame_id": fid, "source": "look", "t": snap["observed"]["t"]})
+        self.assertEqual(snap["observed"], {"text": "Yes, that looks done.", "frame_id": fid, "source": "look", "t": snap["observed"]["t"]})
 
         self.c.submit_text("done")
         snap = self.api_state()
         self.assertEqual(snap["hero"]["kind"], "correcting")
         self.assertTrue(snap["hero"]["text"].startswith("Hold on"))
-        self.assertEqual(snap["observed"]["text"], "False")
+        self.assertEqual(snap["observed"]["text"], "No, that isn't done yet.")
 
         self.c.submit_text("repeat")
         self.assertEqual(self.api_state()["hero"]["kind"], "instructing")

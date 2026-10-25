@@ -92,6 +92,8 @@ Design: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 | `JM_EXPERT` | `the expert` | How it refers to the expert |
 | `JM_OBSERVE_EVERY` | `10` | Seconds between "what did they do?" checks |
 | `JM_QUESTION_GAP` | `20` | Minimum seconds between questions |
+| `JM_PROFILE` | (none) | `thor31b`: short calls for the dense 31B on Thor (3 frames at 384 px under 96 KB, 20 s observe interval, replies capped at 220/60/160 tokens for observe/look/agent, compact JSON, timeouts 75/30/60 s). Any `JM_*` set explicitly wins; see `PROFILES` in `journeyman/config.py` |
+| `JM_MAX_TOKENS_<KIND>` | (no cap) | Reply cap per call kind: `observe`, `look`, `agent`, `why`, `question`, `ears` |
 
 ## Tests
 ```sh
