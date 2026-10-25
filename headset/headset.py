@@ -228,9 +228,12 @@ class Speaker:
         dt = self.timing.reply_started()
         took = f"   [{dt:.1f}s after you stopped]" if dt is not None else ""
         self.link.console.line(f"journeyman: {item['text']}{took}")
-        self.busy_until = time.time() + 600
+        limit = 8 + 0.12 * len(item["text"])
+        self.busy_until = time.time() + limit
         try:
-            subprocess.run(self.command(item["text"]), check=False)
+            subprocess.run(self.command(item["text"]), check=False, timeout=limit)
+        except subprocess.TimeoutExpired:
+            self.link.console.line("[speaker] `say` took too long; skipped so the mic comes back")
         except FileNotFoundError:
             pass
         self.busy_until = time.time() + 0.4
