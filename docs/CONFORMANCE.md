@@ -61,4 +61,6 @@ export JM_GEMMA_URL=http://localhost:11434/v1 JM_GEMMA_MODEL=gemma4-e2b-cpu4:lat
 | tool probe (doctor) | 0.4–1.9 s | |
 | cold model load | about 12 s | after the thread fix |
 
+On this CPU, look (22 s) is close to its 25 s timeout (`JM_TIMEOUT_LOOK`), and observe (47–53 s) is close to its 60 s timeout. Raise them if Thor is not much faster.
+
 None of this is Thor. Thor's GPU should be much faster; measure it there with `./jm bench --image <frame>.jpg`.
