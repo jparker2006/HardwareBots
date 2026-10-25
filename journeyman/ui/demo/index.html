@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#09090d">
+<title>Journeyman · demo</title>
+<link rel="stylesheet" href="./style.css"><script type="module" src="./app.js"></script>
+</head>
+<body>
+<header><a class="brand" href="./">journeyman<span>_</span></a><span id="mode">READY</span><span class="local">on-device · no cloud</span></header>
+<main>
+  <section class="speech" aria-label="Journeyman says"><div class="words"><h1 id="hero" aria-live="polite"></h1><p id="reason" hidden></p></div><div class="voice"><canvas id="planet" aria-hidden="true"></canvas><span id="voice-state" role="status">listening</span></div></section>
+  <div class="workspace"><section class="camera-box" aria-label="Live camera"><img id="camera" alt="Live workbench camera" hidden><span id="no-camera">Waiting for camera</span><span id="live" hidden><i></i> LIVE</span></section><ol id="steps" aria-label="Procedure steps"></ol></div>
+</main>
+<dialog id="fallback" aria-label="Voice fallback"><form id="say" autocomplete="off"><label for="say-text">Say to Journeyman</label><div><input id="say-text" name="text" placeholder="Type an utterance…" required><button type="submit">Send ↵</button></div><span id="say-state" role="status"></span></form></dialog>
+</body>
+</html>
