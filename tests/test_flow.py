@@ -68,7 +68,8 @@ class FlowTest(unittest.TestCase):
         self.assertIn("trace", c.state.said[-1]["text"])
         conductor.submit_text("What torque should the screws be?")
         self.assertEqual(len(c.state.open_questions), 1)
-        self.assertIn("not captured", c.state.said[-1]["text"].lower())
+        last = c.state.said[-1]["text"].lower()
+        self.assertTrue("not captured" in last or "hasn't covered that" in last)
 
         steps = c.state.procedure_steps("cable-swap")
         self.assertTrue(any(st["warnings"] for st in steps))

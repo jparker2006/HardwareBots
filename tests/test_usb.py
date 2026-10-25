@@ -39,3 +39,21 @@ class CheckUsbTest(unittest.TestCase):
 
     def test_tool_is_available_to_the_agent(self):
         self.assertIn("check_usb", [t["function"]["name"] for t in ops.tool_schemas()])
+
+
+class UsbAnswerTest(unittest.TestCase):
+    def test_usb_question_reads_live_state_without_the_tool_loop(self):
+        import tempfile
+        from tests import fake_gemma
+        from journeyman.config import Config
+        from journeyman.core import Core
+        server, script, url = fake_gemma.start()
+        try:
+            core = Core(Config(gemma_url=url, data_dir=tempfile.mkdtemp(), camera="none"), sync=True)
+            with mock.patch.object(usb, "_run", side_effect=fake_run):
+                reply = core.agent.respond("Journeyman, why isn't my drive showing up?")
+            self.assertTrue(reply)
+            self.assertFalse(any(r.get("tools") for r in script.requests))
+            self.assertIn("not mounted", json.dumps(script.requests[-1]))
+        finally:
+            server.shutdown()

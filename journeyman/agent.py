@@ -34,6 +34,9 @@ META = re.compile(r"\b(saved knowledge|knowledge base|search results?|tool calls
 QUESTION = re.compile(r"^(why|how|what|where|when|which|who|should|can|could|do|does|is|are|will|would|tell me)\b")
 
 
+USB_WORDS = re.compile(r"\b(usb|thumb ?drive|flash drive|drive|lexar|mount|unmount|port)s?\b", re.I)
+
+
 def is_question(text: str) -> bool:
     text = re.sub(r"^\s*((hello|hey|hi|ok|okay|so|um+|uh+|alright|journeyman)\b[\s,.:!?]*)+", "", text.lower())
     return "?" in text or bool(QUESTION.match(text))
@@ -96,6 +99,8 @@ class Agent:
 
     def respond(self, utterance: str) -> str:
         turn = Turn()
+        if USB_WORDS.search(utterance):
+            return self.respond_usb(utterance, turn)
         try:
             reply = self._tool_loop(utterance, turn)
         except GemmaError as e:
@@ -107,7 +112,7 @@ class Agent:
         if is_question(utterance) and not turn.found:
             return self.respond_without_tools(utterance, turn)
         if asks_why(utterance) and turn.found and not turn.found[0]["whys"]:
-            return self._say(NOT_CAPTURED, utterance, turn)
+            return self._say(self._best_guess(utterance), utterance, turn)
         if turn.said and reply:
             return reply
         if not reply:
@@ -160,7 +165,7 @@ class Agent:
         turn = turn or Turn()
         found = ops.run(self.core, "search_knowledge", {"query": utterance})["matches"]
         if not found or asks_why(utterance) and not found[0]["whys"]:
-            return self._say(NOT_CAPTURED, utterance, turn)
+            return self._say(self._best_guess(utterance), utterance, turn)
         if not use_model:
             return self._say(self._from_knowledge(found), utterance, turn)
         try:
@@ -184,8 +189,46 @@ class Agent:
             text = f"Step {top['n']} is: {(top.get('title') or top.get('action') or '').rstrip('.')}."
         return speakable(text[:1].upper() + text[1:])
 
+    def _best_guess(self, utterance: str) -> str:
+        """Not captured: still try, but say plainly it's a guess, not the expert's answer."""
+        who = self.core.config.expert_name
+        who = "The expert" if who.lower() in ("", "the expert") else who
+        try:
+            msg = self._chat([{"role": "user", "content":
+                               f"A trainee asked: {utterance}\nGive your best practical answer in one short spoken sentence. "
+                               "No hedging words, no markdown."}], max_tokens=60)
+            guess = speakable(msg.get("content") or "", sentences=1).rstrip(".")
+        except FAILURES:
+            guess = ""
+        if not guess or "not captured" in guess.lower():
+            return NOT_CAPTURED
+        return f"{who} hasn't covered that yet. My best guess: {guess}. I'll ask {('them' if who == 'The expert' else who)} next session."
+
+    def respond_usb(self, utterance: str, turn: Turn) -> str:
+        """USB questions: read the Jetson's live USB state, add the expert's matching step, let Gemma say it."""
+        state = ops.run(self.core, "check_usb", {}, caller="agent")
+        turn.ran.append("check_usb")
+        found = ops.run(self.core, "search_knowledge", {"query": utterance + " usb drive mount port"})["matches"]
+        steps = [{"step": m["title"], "why": m["whys"][0]["why"] if m["whys"] else ""} for m in found[:2]]
+        live = state["hints"][0] if state["hints"] else "No USB drive is visible to the Jetson."
+        try:
+            msg = self._chat([
+                {"role": "system", "content": self._system()},
+                {"role": "user", "content": f"Live USB state of the Jetson right now: {json.dumps(state)}\n"
+                                            f"The expert's saved steps: {json.dumps(steps)}\n\nQuestion: {utterance}\n"
+                                            "In two short spoken sentences: say what the Jetson sees right now, then the fix. "
+                                            "If an expert step matches, give its reason in the expert's words. No markdown, no commands spelled out."},
+            ], max_tokens=120)
+            reply = speakable(msg.get("content") or "")
+        except FAILURES as e:
+            self.core.note("warn", f"USB answer without Gemma: {e}")
+            reply = ""
+        if not reply:
+            reply = live.split(":")[0] + "."
+        return self._say(reply, utterance, turn)
+
     def _say(self, reply: str, utterance: str, turn: Turn) -> str:
-        if "not captured" in reply.lower() and not turn.logged:
+        if ("not captured" in reply.lower() or "hasn't covered that" in reply) and not turn.logged:
             ops.run(self.core, "log_question", {"question": utterance})
             turn.logged = True
         if reply and reply not in turn.said:

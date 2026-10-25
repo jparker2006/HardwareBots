@@ -11,6 +11,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from journeyman import ops  # noqa: E402
 from journeyman.agent import NOT_CAPTURED, is_question, speakable  # noqa: E402
+
+
+def uncovered(reply: str) -> bool:
+    """Not captured: either the fixed line or an honest best guess."""
+    return reply == NOT_CAPTURED or ("hasn't covered that yet. My best guess:" in reply and "next session" in reply)
 from journeyman.config import Config  # noqa: E402
 from journeyman.core import Core  # noqa: E402
 from journeyman.gemma import merge_roles, tool_calls  # noqa: E402
@@ -107,21 +112,21 @@ class AgentTest(unittest.TestCase):
 
     def test_answer_without_search_is_not_trusted(self):
         self.play({"content": "Torque them to 5 Nm."})
-        self.assertEqual(self.ask("What torque should the screws be?"), NOT_CAPTURED)
+        self.assertTrue(uncovered(self.ask("What torque should the screws be?")))
         self.assertEqual(len(self.core.state.open_questions), 1)
 
     def test_invented_answer_after_empty_search_is_replaced(self):
         self.play(call("search_knowledge", {"query": "torque"}), {"content": "Use 5 Nm."})
-        self.assertEqual(self.ask("What torque should the screws be?"), NOT_CAPTURED)
-        self.assertEqual(self.said(), [NOT_CAPTURED])
+        self.assertTrue(uncovered(self.ask("What torque should the screws be?")))
+        self.assertTrue(len(self.said()) == 1 and uncovered(self.said()[0]))
         self.assertEqual(len(self.core.state.open_questions), 1)
 
     def test_why_about_a_step_with_no_reason_is_not_captured(self):
         ops.run(self.core, "save_step", {"title": "Leave slack cable loop", "action": "leaves a slack loop in the cable"})
         self.play(call("search_knowledge", {"query": "slack"}),
                   {"content": "search_knowledge. The saved knowledge does not provide the reason for leaving slack."})
-        self.assertEqual(self.ask("Why do I leave slack in the cable?"), NOT_CAPTURED)
-        self.assertEqual(self.said(), [NOT_CAPTURED])
+        self.assertTrue(uncovered(self.ask("Why do I leave slack in the cable?")))
+        self.assertTrue(len(self.said()) == 1 and uncovered(self.said()[0]))
         self.assertEqual([q["question"] for q in self.core.state.open_questions.values()],
                          ["Why do I leave slack in the cable?"])
 
