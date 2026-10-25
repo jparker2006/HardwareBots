@@ -12,6 +12,21 @@ scripts/thor-down.sh          # stop jm serve and both containers
 - Out of memory? Lower `JM_31B_MEM` / `JM_E4B_MEM` (fractions of the GPU memory, default 0.50 / 0.25) or `JM_MAX_LEN` (8192). NVFP4 not detected? `JM_31B_ARGS="--quantization modelopt_fp4"`. Startup errors and their fixes: [docs/VLLM-THOR.md](../docs/VLLM-THOR.md).
 - Want to probe vLLM from the Mac? `JM_VLLM_HOST=0.0.0.0` (default: Thor only).
 
+# Go-live: carry the vLLM image to Thor on a USB drive
+
+Thor's own internet is too slow for the ~20 GB vLLM image, so the Mac downloads it (`tools/pull_image.py` into `~/jm-vllm-image`) and a USB drive carries it.
+
+```sh
+scripts/usb-image.sh             # Mac: copy ~/jm-vllm-image to the only drive in /Volumes, check sizes, eject
+scripts/usb-image.sh Lexar       # pick the drive when there are several;  --dry-run checks only;  --no-eject
+scripts/go-live.sh               # Thor: find the USB, mount it read-only, docker load, check the tag, unmount,
+                                 #       thor-up.sh --only-31b, jm doctor, jm bench; all output in ~/go-live.log
+scripts/go-live.sh --dry-run     # find the drive and print every command
+```
+- The drive must be exFAT (or APFS/ext4), not FAT32: image layers are bigger than 4 GB. `usb-image.sh` refuses FAT32 when a file is too big, and resumes if run again (files already the right size are skipped).
+- `go-live.sh` uses sudo only to mount/unmount the drive (at `JM_USB_MNT`, default `/mnt/jm-usb`); a drive the desktop already mounted is used in place, no sudo. `docker` falls back to `sudo docker` if your user is not in the docker group, and `thor-up.sh` uses sudo to drop the page cache (`JM_DROP_CACHES=0` skips it).
+- More than one USB partition? `--dev /dev/sda1`. Image already copied somewhere? `--dir PATH`. Already loaded: `docker load` is skipped unless `--reload`.
+
 # Plan B: everything on the Mac
 
 ```sh
