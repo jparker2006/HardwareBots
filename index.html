@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Journeyman · Gemma Hardware Hackathon</title>
+<style>
+:root{--bg:#09090d;--ink:#eceaf2;--muted:#9993a8;--lime:#c6f35a;--purple:#ad8cdd;--line:#28232f;--card:#111017;--mono:ui-monospace,"SF Mono",Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:18px/1.5 -apple-system,BlinkMacSystemFont,"Helvetica Neue",Helvetica,Arial,sans-serif}
+main{max-width:1180px;margin:0 auto;padding:48px 32px 80px}
+.brand{font:500 22px var(--mono);letter-spacing:-1px}.brand b{color:var(--lime);font-weight:500}
+h1{font-size:60px;line-height:1.05;letter-spacing:-.04em;font-weight:600;margin:22px 0 14px}
+h1 span{color:var(--lime)}
+.sub{font:15px var(--mono);color:var(--muted);margin:0 0 30px}
+video{width:100%;border-radius:18px;border:1px solid var(--line);background:#000;display:block}
+h2{font:500 14px var(--mono);letter-spacing:.12em;color:var(--lime);text-transform:uppercase;margin:64px 0 18px}
+.three{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:24px}
+.card .n{font:500 14px var(--mono);color:var(--purple)}
+.card h3{font-size:28px;letter-spacing:-.02em;margin:6px 0 8px}
+.card p{margin:0;color:#c9c5d3}
+.arch{display:grid;grid-template-columns:1fr 70px 1.35fr;align-items:stretch}
+.box{border:1px solid var(--line);border-radius:18px;padding:22px;background:var(--card)}
+.box .where{font:500 14px var(--mono);color:var(--muted);margin-bottom:14px}
+.part{display:grid;grid-template-columns:96px 1fr;gap:12px;padding:11px 0;border-top:1px solid #1d1a24}
+.part:first-of-type{border-top:0}
+.part b{font:500 14px var(--mono);color:var(--lime);padding-top:3px}
+.part small{display:block;color:var(--muted);font-size:15px}
+.wire{display:flex;flex-direction:column;justify-content:center;align-items:center;font:12px var(--mono);color:var(--muted);text-align:center;gap:6px}
+.wire i{display:block;width:100%;height:2px;background:linear-gradient(90deg,var(--purple),var(--lime))}
+.cloud{margin-top:16px;font:15px var(--mono);color:var(--muted)}.cloud b{color:var(--lime);font-weight:500}
+.honest{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.honest ul{margin:0;padding-left:20px;color:#c9c5d3}.honest li{margin:6px 0}
+.talk{font-size:22px;line-height:1.45}.talk p{margin:0 0 14px;display:grid;grid-template-columns:150px 1fr;gap:12px}.talk b{color:var(--lime);font:500 14px var(--mono);padding-top:8px}
+footer{margin-top:64px;font:15px var(--mono);color:var(--muted)}footer a{color:var(--lime)}
+@media(max-width:860px){h1{font-size:40px}.three,.honest{grid-template-columns:1fr}.arch{grid-template-columns:1fr}.wire{padding:14px 0}}
+</style>
+</head>
+<body><main>
+<div class="brand">journeyman<b>_</b></div>
+<h1>It learns a job by watching an expert once.<br><span>Then it teaches the next person.</span></h1>
+<p class="sub">Gemma 4 · NVIDIA Jetson AGX Thor · a camera, a mic, no cloud</p>
+
+<video src="journeyman-demo.mp4" controls autoplay muted playsinline></video>
+
+<h2>Like you're five</h2>
+<div class="three">
+  <div class="card"><div class="n">1 · WATCH</div><h3>The expert shows it</h3><p>The expert does the job and talks. Journeyman sees through a camera and hears through a mic.</p></div>
+  <div class="card"><div class="n">2 · REMEMBER</div><h3>It writes it down</h3><p>Gemma turns what it saw and heard into numbered steps. If a step has no reason, it asks "why?"</p></div>
+  <div class="card"><div class="n">3 · TEACH</div><h3>It teaches the new person</h3><p>The new person says "teach me." It reads each step and checks with the camera. If it doesn't know an answer, it says so and saves the question for the expert.</p></div>
+</div>
+
+<h2>How it's built</h2>
+<div class="arch">
+  <div class="box"><div class="where">MAC · the headset</div>
+    <div class="part"><b>EARS</b><div>Gemma 4 E2B on LiteRT-LM<small>speech → words, on the laptop</small></div></div>
+    <div class="part"><b>BRAIN</b><div>Gemma 4 E4B<small>reads frames + words, picks tools</small></div></div>
+    <div class="part"><b>MOUTH</b><div>macOS voice<small>says Journeyman's replies out loud</small></div></div>
+  </div>
+  <div class="wire"><i></i>local<br>network<i></i></div>
+  <div class="box"><div class="where">JETSON AGX THOR · the boss</div>
+    <div class="part"><b>EYES</b><div>Logitech Brio camera<small>keeps a frame every second</small></div></div>
+    <div class="part"><b>HANDS</b><div>Tools = command-line commands<small>check_usb · look · save_step · save_why · search_knowledge · log_question</small></div></div>
+    <div class="part"><b>MEMORY</b><div>One log that only ever grows<small>every word, step and answer; procedure cards rebuild from it</small></div></div>
+    <div class="part"><b>SCREEN</b><div>This UI<small>what it's saying, the live camera, the steps</small></div></div>
+  </div>
+</div>
+<p class="cloud">Internet needed: <b>none.</b> Every model, word and frame stays on the table.</p>
+
+<h2>Honest status</h2>
+<div class="honest">
+  <div class="card"><div class="n">WORKS LIVE</div><ul>
+    <li>Voice in and out, transcribed by Gemma on-device</li>
+    <li>Capture: steps written from the camera + narration</li>
+    <li>Teach: step by step, with camera checks</li>
+    <li>Live USB diagnosis on the Jetson in ~3 s</li></ul></div>
+  <div class="card"><div class="n">NEXT</div><ul>
+    <li>Gemma 4 31B on Thor's GPU: our model files were corrupt, so today the small Gemmas run on the Mac</li>
+    <li>Faster replies once the brain moves to Thor</li>
+    <li>Parts of the video are sped up, and labeled</li></ul></div>
+</div>
+
+<h2>Talk track</h2>
+<div class="talk">
+  <p><b>WHAT</b>Every job has an expert whose know-how was never written down. Journeyman learns it by watching once, then teaches the next person by voice.</p>
+  <p><b>WHY COOL</b>It asks "why?", checks your work with a camera, and says "I don't know" instead of making things up. No cloud.</p>
+  <p><b>WHY IT WORKS</b>Gemma 4 is the eyes, ears and brain. Every action is a plain command-line tool. Everything lands in one log the cards are rebuilt from.</p>
+</div>
+
+<footer>Jake Parker · <a href="https://github.com/jparker2006/Journeyman">github.com/jparker2006/Journeyman</a> · Apache-2.0</footer>
+</main></body>
+</html>
