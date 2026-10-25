@@ -119,17 +119,20 @@ def cmd_seed(args):
     from . import demo
     if service_up(args.url):
         run, where = (lambda name, a: call(args.url, name, a)), args.url
+        add_frame = lambda jpeg: request_json(f"{args.url}/api/frames",  # noqa: E731
+                                              {"jpeg_b64": base64.b64encode(jpeg).decode()})["frame_id"]
     else:
         from .core import Core
         core = Core(Config(), sync=True)
-        run, where = (lambda name, a: ops.run(core, name, a)), str(core.config.data_dir)
+        run, where, add_frame = (lambda name, a: ops.run(core, name, a)), str(core.config.data_dir), core.eyes.ingest
     try:
-        r = demo.seed(run, demo.load_card(Path(args.recording)), confirm=not args.unconfirmed)
+        r = demo.seed(run, demo.load_card(Path(args.recording)), confirm=not args.unconfirmed, add_frame=add_frame)
     except demo.SeedError as e:
         print(e, file=sys.stderr)
         sys.exit(1)
+    photos = f", {r['frames']} photos" if r["frames"] else ""
     print(f"seeded {r['procedure']}: {r['steps']} steps, {r['whys']} reasons"
-          f"{', confirmed' if r['confirmed'] else ', unconfirmed'}, into {where}")
+          f"{', confirmed' if r['confirmed'] else ', unconfirmed'}{photos}, into {where}")
 
 
 def cmd_reset(args):

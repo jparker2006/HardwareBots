@@ -6,8 +6,11 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
+import urllib.request
 from contextlib import redirect_stdout
+from http.server import ThreadingHTTPServer
 from pathlib import Path
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -16,6 +19,7 @@ from journeyman import cli  # noqa: E402
 from journeyman.config import Config  # noqa: E402
 from journeyman.core import Core  # noqa: E402
 from journeyman.recorder import Recorder, load_script, replay_into, summarize  # noqa: E402
+from journeyman.server import make_handler  # noqa: E402
 from tests import fake_gemma  # noqa: E402
 
 JPEG = bytes.fromhex("ffd8ffe000104a46494600010100000100010000ffd9")
@@ -106,6 +110,34 @@ class ReplayTest(unittest.TestCase):
         with redirect_stdout(out):
             cli.main(["recordings", str(demo.parent)])
         self.assertIn("8 utterances", out.getvalue())
+
+    def test_frames_recording_saves_steps_with_photos(self):
+        rec = Path(__file__).parent.parent / "recordings" / "demo-frames"
+        fresh = self.core()
+        self.assertEqual(replay_into(fresh, rec), 13)
+        steps = fresh.state.procedure_steps("cable-swap")
+        self.assertTrue(steps)
+        self.assertTrue(all(st.get("frame_id") in fresh.state.frames for st in steps))
+        self.assertTrue(fresh.state.gaps)
+        self.assertEqual(summarize(rec)["frames"], 7)
+
+    def test_jm_replay_fast_posts_frames_to_the_service(self):
+        core = self.core()
+        ui = ThreadingHTTPServer(("127.0.0.1", 0), make_handler(core))
+        threading.Thread(target=ui.serve_forever, daemon=True).start()
+        self.addCleanup(ui.server_close)
+        self.addCleanup(ui.shutdown)
+        url = f"http://127.0.0.1:{ui.server_port}"
+        out = io.StringIO()
+        with redirect_stdout(out):
+            cli.main(["--url", url, "replay", str(Path(__file__).parent.parent / "recordings" / "demo-frames"),
+                      "--fast", "--settle", "1"])
+        self.assertIn("replayed 13 lines", out.getvalue())
+        steps = core.state.procedure_steps("cable-swap")
+        self.assertTrue(steps)
+        fid = steps[0]["frame_id"]
+        with urllib.request.urlopen(f"{url}/api/frames/{fid}.jpg") as r:
+            self.assertEqual(r.read()[:2], b"\xff\xd8")
 
 
 if __name__ == "__main__":

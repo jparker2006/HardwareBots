@@ -1,0 +1,13 @@
+{"at": 0, "text": "Journeyman, start capture"}
+{"at": 2, "frame": "frames/01-panel.jpg"}
+{"at": 5, "text": "First I find the port by its label, not by counting"}
+{"at": 7, "frame": "frames/02-find-port.jpg"}
+{"at": 11, "text": "Now I pull the old cable straight out"}
+{"at": 13, "frame": "frames/03-pull-old.jpg"}
+{"at": 18, "frame": "frames/04-label-ends.jpg"}
+{"at": 23, "frame": "frames/04-label-ends.jpg"}
+{"at": 30, "text": "So the next tech can trace it without pulling every cable"}
+{"at": 34, "frame": "frames/05-plug-slack.jpg"}
+{"at": 36, "text": "New cable goes in, and I leave a little loop of slack"}
+{"at": 40, "frame": "frames/06-done.jpg"}
+{"at": 43, "text": "I'm done"}
