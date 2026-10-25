@@ -68,7 +68,7 @@ class ThorScriptsTest(unittest.TestCase):
         os.chmod(docker, 0o755)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith(("JM_", "HF_"))}
         self.env.update(JM_31B_DIR=self.dir31, JM_HF_CACHE=os.path.join(self.tmp, "hf"), JM_DOCKER=docker,
-                        JM_RUN_DIR=os.path.join(self.tmp, "run"), FAKE_STATE=self.state)
+                        JM_RUN_DIR=os.path.join(self.tmp, "run"), FAKE_STATE=self.state, JM_DROP_CACHES="0")
 
     def tearDown(self):
         shutil.rmtree(self.tmp, ignore_errors=True)
@@ -98,6 +98,17 @@ class ThorScriptsTest(unittest.TestCase):
         self.assertNotIn("gemma-4-E4B-it", out)
         self.assertIn("JM_GEMMA_URL=http://127.0.0.1:8001/v1 JM_GEMMA_MODEL=gemma-4-31b", out)
         self.assertIn("no audio input", out)
+
+    def test_31b_startup_workarounds(self):
+        code, out = self.sh(UP, "--dry-run", "--only-31b", JM_DROP_CACHES="1",
+                            JM_DOCKER_ARGS="-e TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas")
+        self.assertEqual(code, 0, out)
+        self.assertIn("--kv-cache-dtype bfloat16", out)
+        self.assertIn("echo 3 | sudo tee /proc/sys/vm/drop_caches", out)
+        self.assertIn("-e TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas -v ", out)
+        code, out = self.sh(UP, "--dry-run", "--only-31b", JM_31B_KV="auto", JM_31B_ARGS="--enforce-eager")
+        self.assertIn("--kv-cache-dtype auto --enforce-eager", out)
+        self.assertNotIn("drop_caches", out)
 
     def test_dry_run_only_e4b_cached_runs_offline(self):
         snap = os.path.join(self.tmp, "hf", "hub", "models--google--gemma-4-E4B-it", "snapshots", "abc")
