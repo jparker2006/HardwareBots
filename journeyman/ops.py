@@ -187,6 +187,13 @@ def get_procedure(core, procedure=None):
 
 # ---- sense and speak ----------------------------------------------------
 
+@op("check_usb", "sense", "Read the Jetson's live USB state: devices plugged in, drives, and whether each is mounted. Read-only.",
+    agent=True)
+def check_usb(core):
+    from . import usb
+    return usb.status()
+
+
 @op("look", "sense", "Ask the camera about the last few seconds of work.",
     [Param("question", help="a specific visual question"), Param("seconds", "number", "how far back", False, default=10)],
     agent=True)
