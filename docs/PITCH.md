@@ -49,4 +49,4 @@ Spoken script, about 420 words plus the live demo. Timings are targets. Everythi
 - That it captures all tacit knowledge, cuts training time, or reduces callbacks.
 - The 70% figure as a measured fact.
 - That it is safe for energized equipment. The demo cable is unpowered.
-- LiteRT, unless the LiteRT piece actually runs.
+- That LiteRT runs on the Mac or does the listening, until we've seen it there. Fine to say: "Gemma 4 E2B on LiteRT-LM answers from the card offline" (verified on a Linux CPU).

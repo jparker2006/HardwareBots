@@ -7,13 +7,17 @@ It watches and listens while a senior technician works and asks about the steps 
 Journeyman turns a senior tech's hands-on work into skills: for people today, robots tomorrow.
 
 - **Built at** the Google Gemma Hardware Hackathon (AGI House, 2026-10-24), with Gemma 4.
-- **Track:** Physical AI, Robotics and Embedded Devices (Embedded track).
-- **Status:** the full capture → teach → improve loop passes end-to-end tests against a scripted Gemma stand-in. Running live on Thor with the Brio camera and voice is the target, and isn't verified yet.
+- **Track:** Physical AI, Robotics and Embedded Devices (Embedded track). Also entering Best Use of LiteRT ([litert/](litert/README.md)).
+- **Status:**
+  - *Working:* the full capture → teach → improve loop runs end to end in our tests against a scripted Gemma stand-in.
+  - *Working, but not on Thor:* real Gemma 4 E2B on a CPU-only Linux box handled every call type ([docs/CONFORMANCE.md](docs/CONFORMANCE.md)). LiteRT-LM ran Gemma 4 E2B there and answered card questions offline ([litert/README.md](litert/README.md)).
+  - *Target, not yet verified:* Gemma 4 31B on Thor, live Brio camera checks, voice over USB-C, and speech-to-text on the Mac through LiteRT-LM.
 - **Docs:** [pitch](docs/PITCH.md), [demo run sheet](docs/DEMO.md), [submission](docs/SUBMISSION.md), [architecture](docs/ARCHITECTURE.md).
 
 ```
- Mac (headset): mic + speaker  ──USB-C──▶  Thor: journeyman service + Gemma 4 + Brio camera ──HDMI──▶ monitor
+ Mac (headset): mic + speaker, LiteRT-LM Gemma 4 E2B ──USB-C──▶ Thor: journeyman service + Gemma 4 31B (vLLM) + Brio camera ──HDMI──▶ monitor
 ```
+On Thor, `scripts/thor-up.sh` starts the models, checks them, and runs `jm serve` ([scripts/README.md](scripts/README.md)).
 
 ## Run it
 
