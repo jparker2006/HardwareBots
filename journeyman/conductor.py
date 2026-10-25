@@ -147,8 +147,9 @@ class Conductor(CaptureMixin, TeachMixin):
         if cmd == "start_teach" and s.mode != "teach":
             self.start_session("teach")
             return
-        if cmd == "end" and s.mode != "idle":
-            self.end_session()
+        if cmd == "end":
+            if s.mode != "idle":
+                self.end_session()
             return
         if s.mode == "capture":
             if s.pending_question and time.time() - s.pending_question["t"] < 60:

@@ -99,4 +99,5 @@ class Core:
         return items
 
     def dump(self) -> str:
-        return json.dumps(self.state.snapshot(), default=str)
+        snap = {**self.state.snapshot(), "now": time.time(), "expert": self.config.expert_name}
+        return json.dumps(snap, default=str)
