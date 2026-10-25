@@ -222,7 +222,7 @@ h1.prompt {
 #badge.capture b {
   color:#ff8a8a
 }
-#badge.teach i {
+#badge.teach i,#badge.saved i {
   background:var(--lime)
 }
 #badge.teach b {
@@ -237,6 +237,9 @@ h1.prompt {
   color:var(--muted);
   font:15px var(--mono);
   min-height:1.2em
+}
+#steps:empty {
+  display:none
 }
 #empty {
   flex:1;
@@ -282,7 +285,7 @@ h1.prompt {
 #steps {
   list-style:none;
   padding:0;
-  margin:0;
+  margin:0 0 14px;
   display:flex;
   flex-direction:column;
   flex:1;
@@ -506,6 +509,9 @@ button {
   white-space:nowrap;
   overflow:hidden;
   text-overflow:ellipsis
+}
+#steps.scrolled {
+  mask-image:linear-gradient(transparent,#000 48px)
 }
 #steps.dense {
   gap:6px

@@ -11,7 +11,7 @@ const ACTIONS = {
 };
 let skew = 0, clockFrom = null, waiting = null, lastMode = 'idle';
 const clock = secs => `${Math.floor(secs / 60)}:${String(Math.floor(secs % 60)).padStart(2, '0')}`;
-function tickTimer() { $('timer').textContent = clockFrom ? clock(Math.max(0, Date.now() / 1000 + skew - clockFrom)) : ''; }
+function tickTimer() { if (clockFrom) $('timer').textContent = clock(Math.max(0, Date.now() / 1000 + skew - clockFrom)); }
 setInterval(tickTimer, 1000);
 function render(s) {
   const teach = s.mode === 'teach', capture = s.mode === 'capture', idle = !teach && !capture;
@@ -26,7 +26,7 @@ function render(s) {
   $('mode').textContent = capture ? '● RECORDING' : teach ? 'TEACHING' : 'READY';
   $('mode').className = s.mode || 'idle';
   // Session panel: what is happening, for how long, and how to stop it.
-  $('badge').className = s.mode || 'idle';
+  $('badge').className = idle ? (session?.ended ? 'saved' : 'idle') : s.mode;
   $('session-label').textContent = capture ? 'Recording' : teach ? 'Teaching' : session?.ended ? 'Session saved' : 'No session';
   clockFrom = idle ? null : session?.started;
   if (idle) $('timer').textContent = session?.ended ? clock(session.ended - session.started) : '';
@@ -87,6 +87,10 @@ function render(s) {
     const index = visible.indexOf(st);
     if ($('steps').children[index] !== row) $('steps').insertBefore(row, $('steps').children[index] || null);
   }
+  // Wrapped titles can outgrow the panel: keep the current (newest while recording) step in view.
+  const list = $('steps'), cur = list.querySelector('.current');
+  list.scrollTop = cur ? Math.max(0, cur.offsetTop - list.offsetTop + cur.offsetHeight - list.clientHeight) : 0;
+  list.classList.toggle('scrolled', list.scrollTop > 0);
 }
 async function send(text) {
   const r = await fetch('/api/headset/utterance', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text}),signal:AbortSignal.timeout(5000)});
