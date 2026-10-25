@@ -2,6 +2,7 @@
 
 The loop is bounded by config.max_tool_calls. Questions are answered only from saved knowledge:
 if search finds nothing, or a "why" finds no saved reason, the reply is "not captured" and the question is logged, whatever the model said.
+During a question, speak calls are held until that check passes.
 JM_SYSTEM_ROLE=merge folds the system prompt and tool results into user turns for templates without them."""
 from __future__ import annotations
 
@@ -69,6 +70,8 @@ class Turn:
         self.logged = False
         self.said: list[str] = []
         self.ran: list[str] = []
+        self.question = False
+        self.held: list[str] = []
 
 
 class Agent:
@@ -95,6 +98,7 @@ class Agent:
 
     def respond(self, utterance: str) -> str:
         turn = Turn()
+        turn.question = is_question(utterance)
         try:
             reply = self._tool_loop(utterance, turn)
         except GemmaError as e:
@@ -103,10 +107,11 @@ class Agent:
         except FAILURES as e:
             self.core.note("warn", f"answering without tools, Gemma failed: {e}")
             return self.respond_without_tools(utterance, turn)
-        if is_question(utterance) and not turn.found:
+        if turn.question and not turn.found:
             return self.respond_without_tools(utterance, turn)
         if asks_why(utterance) and turn.found and not turn.found[0]["whys"]:
             return self._say(NOT_CAPTURED, utterance, turn)
+        reply = reply or " ".join(turn.held)
         if turn.said and reply:
             return reply
         if not reply:
@@ -142,6 +147,10 @@ class Agent:
             args = dict(args, text=speakable(str(args.get("text") or "")))
             if not args["text"]:
                 return {"error": "nothing to say"}
+            if turn.question:
+                turn.held.append(args["text"])
+                turn.ran.append(name)
+                return {"ok": True}
         try:
             result = ops.run(self.core, name, args, caller="agent")
         except Exception as e:  # tool errors go back to the model as data

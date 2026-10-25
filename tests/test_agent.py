@@ -125,6 +125,21 @@ class AgentTest(unittest.TestCase):
         self.assertEqual([q["question"] for q in self.core.state.open_questions.values()],
                          ["Why do I leave slack in the cable?"])
 
+    def test_why_with_no_saved_reason_is_not_captured_and_not_spoken(self):
+        ops.run(self.core, "save_step", {"title": "Find port by label", "action": "locates the port by its label"})
+        self.play(call("speak", {"text": "You label both ends so you know which end goes where."}),
+                  call("search_knowledge", {"query": "label both ends"}), {"content": "Step 1 is: Find port by label."})
+        self.assertEqual(self.ask("why do I label both ends?"), NOT_CAPTURED)
+        self.assertEqual(self.said(), [NOT_CAPTURED])
+        self.assertEqual(len(self.core.state.open_questions), 1)
+
+    def test_held_speech_is_said_once_search_backs_it(self):
+        self.capture()
+        self.play(call("search_knowledge", {"query": "label"}), call("speak", {"text": "Alex says: " + WHY + "."}),
+                  {"content": ""})
+        self.assertEqual(self.ask(), "Alex says: " + WHY + ".")
+        self.assertEqual(self.said(), ["Alex says: " + WHY + "."])
+
     def test_not_captured_logs_once(self):
         self.play(call("search_knowledge", {"query": "torque"}),
                   call("log_question", {"question": "What torque?"}), {"content": NOT_CAPTURED})
