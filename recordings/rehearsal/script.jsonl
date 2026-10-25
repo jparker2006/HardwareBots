@@ -1,0 +1,21 @@
+{"at": 0, "text": "Journeyman, start capture"}
+{"at": 2, "frame": "../demo-frames/frames/01-panel.jpg"}
+{"at": 5, "text": "First I find the port by its label, not by counting"}
+{"at": 7, "frame": "../demo-frames/frames/02-find-port.jpg"}
+{"at": 11, "text": "Now I pull the old cable straight out"}
+{"at": 13, "frame": "../demo-frames/frames/03-pull-old.jpg"}
+{"at": 18, "frame": "../demo-frames/frames/04-label-ends.jpg"}
+{"at": 220, "text": "So the next tech can trace it without pulling every cable"}
+{"at": 240, "frame": "../demo-frames/frames/05-plug-slack.jpg"}
+{"at": 242, "text": "New cable goes in, and I leave a little loop of slack"}
+{"at": 246, "frame": "../demo-frames/frames/06-done.jpg"}
+{"at": 260, "text": "I'm done"}
+{"at": 480, "text": "teach me"}
+{"at": 510, "frame": "../demo-frames/frames/02-find-port.jpg"}
+{"at": 512, "text": "done"}
+{"at": 580, "frame": "../demo-frames/frames/03-pull-old.jpg"}
+{"at": 582, "text": "done"}
+{"at": 650, "frame": "../demo-frames/frames/03-pull-old.jpg"}
+{"at": 652, "text": "done"}
+{"at": 720, "text": "why do I label both ends?"}
+{"at": 770, "text": "what torque do the screws need?"}
