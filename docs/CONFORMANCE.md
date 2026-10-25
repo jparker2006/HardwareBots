@@ -34,7 +34,7 @@ export JM_GEMMA_URL=http://localhost:11434/v1 JM_GEMMA_MODEL=gemma4-e2b-cpu4:lat
 ## What broke, and the fixes
 
 1. **Gemma 4 thinks by default on Ollama, so every reply came back empty** (`content: ""`, `finish_reason: length`, text in `reasoning`). Every Journeyman call has a small `max_tokens`, so all of them failed. `chat_template_kwargs.enable_thinking=false` and `think:false` are ignored by Ollama `/v1`; only `reasoning_effort: "none"` works.
-   Fix: `Gemma.chat` sends `reasoning_effort: "none"` and `chat_template_kwargs: {"enable_thinking": false}`. If a server rejects them with HTTP 400, it resends without them and stops sending them. Tests: `tests/test_conformance.py`.
+   Fix: `Gemma.chat` now sends `reasoning_effort: "none"` alongside the existing `chat_template_kwargs`. It is an OPTIONAL field: if a server rejects it by name, it is dropped for good. Tests: `tests/test_conformance.py`.
 2. **"why" accepted plain narration as the reason.** Right after a question, the expert said "Now I pull the old cable straight out". E2B returned that sentence as `why` every time. Both non-reason test answers were saved as reasons. A stronger prompt sentence did not help.
    Fix: the WHY prompt asks for `"gives_reason": true|false`, and `false` keeps the question open. Live: 9 of 10 right on the same 5 answers. In the replay the narration was rejected and the question stayed open. Test: `test_narration_echoed_as_why_is_not_an_answer`.
 3. **`jm doctor` / `jm bench` reported PASS on empty answers**, and "tool calling: answered in text: ''" (a false WARN), because they built their own request and hit bug 1.
