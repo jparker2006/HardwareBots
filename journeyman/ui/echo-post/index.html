@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#09090d">
+  <title>Journeyman · live field notes</title>
+  <link rel="stylesheet" href="./style.css">
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<a class="skip-link" href="#procedure">Skip to procedure</a>
+<div class="wrap">
+  <header class="masthead">
+    <a class="brand" href="#top" aria-label="Journeyman home">journeyman<span class="cursor" aria-hidden="true">_</span></a>
+    <nav aria-label="Page navigation"><span class="path">~</span> <span class="sigil">$</span> <a href="#procedure"><span class="nav-verb">cat </span>procedure</a><a href="#camera"><span class="nav-verb">view </span>camera</a><a href="#questions"><span class="nav-verb">ls </span>questions</a></nav>
+  </header>
+  <main id="top">
+    <section class="hero" aria-labelledby="headline">
+      <div class="hero-copy">
+        <div class="kicker">Live field notes <span class="separator">/</span> <span id="kind">Awaiting speech</span></div>
+        <p class="command"><span class="path">~/journeyman</span> <span class="sigil">$</span> <span id="command">connecting</span><span class="cursor" aria-hidden="true">_</span></p>
+        <h1 id="headline" aria-live="polite" aria-atomic="true">Connecting…</h1>
+        <div class="hero-meta"><span id="voice" role="status">voice · —</span><span id="needs" hidden>needs you ↗</span><span>runs on this device · no cloud</span></div>
+      </div>
+      <figure class="planet"><canvas id="ascii" aria-hidden="true"></canvas><figcaption><span class="path">[</span> <span id="planet-state">—</span> <span class="path">]</span></figcaption></figure>
+    </section>
+    <div class="body-grid">
+      <article id="procedure" aria-labelledby="procedure-name">
+        <div class="section-head"><span><span class="sigil">$</span> cat procedure</span><span class="rule"></span><span id="revision">rev —</span></div>
+        <header class="article-header"><div><p class="kicker">The procedure</p><h2 id="procedure-name">—</h2></div><div id="progress-label" class="mono"></div></header>
+        <progress id="progress" value="0" max="1" aria-label="Steps completed" hidden></progress>
+        <div id="steps"><p class="empty">Waiting for steps.</p></div>
+      </article>
+      <aside aria-label="Workbench margin">
+        <section id="camera">
+          <div class="section-head"><span><span class="sigil">$</span> view camera</span><span class="rule"></span><span id="frame-count">— frames</span></div>
+          <figure class="camera-figure"><div class="camera-image"><img id="live-camera" alt="Live workbench camera" hidden><span id="camera-empty" class="mono">Waiting for camera</span><span class="image-label">CAM / LIVE</span></div><figcaption id="observed">Observed: —</figcaption></figure>
+        </section>
+        <section class="learned" aria-labelledby="learned-title"><h2 id="learned-title" class="kicker">Learned this session</h2><div class="counters"><div><strong id="learned-steps">0</strong><span>steps</span></div><div><strong id="learned-reasons">0</strong><span>reasons</span></div><div><strong id="learned-mistakes">0</strong><span>mistakes</span></div></div></section>
+        <section id="questions"><div class="section-head"><span><span class="sigil">$</span> ls questions</span><span class="rule"></span><span id="question-count">0 open</span></div><div id="question-list"><p class="empty">No open questions.</p></div></section>
+      </aside>
+    </div>
+  </main>
+  <footer><span id="session"></span><div class="health" role="status"><span id="camera-health">camera · —</span><span id="latency">latency · —</span><span id="link">link · connecting</span></div></footer>
+</div>
+<noscript><p class="empty">JavaScript is required for live updates.</p></noscript>
+</body>
+</html>
