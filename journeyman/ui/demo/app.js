@@ -45,12 +45,13 @@ function render(s) {
     b.disabled = id === 'secondary' && idle && !steps.length;
   }
   $('primary').className = capture ? 'stop' : '';
+  $('hint').textContent = `or ${primary[2]}`;
   // Ending a capture reviews the last frames first; hold the button until the mode actually changes.
   if (waiting && waiting.mode === (s.mode || 'idle') && Date.now() < waiting.until) {
     $('primary').disabled = $('secondary').disabled = true;
     $('primary').textContent = capture ? 'Saving…' : teach ? 'One moment…' : 'Starting…';
+    $('primary').classList.add('busy'); $('hint').textContent = capture ? 'checking the last few seconds' : 'one moment';
   } else waiting = null;
-  $('hint').textContent = `or ${primary[2]}`;
   // Never paraphrase, truncate or type out the spoken line: judges see it immediately.
   const spoken = s.hero?.text ?? s.said?.at(-1)?.text ?? '';
   $('hero').textContent = spoken || 'Say “Journeyman, start capture.”';

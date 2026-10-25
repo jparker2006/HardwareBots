@@ -275,6 +275,10 @@ h1.prompt {
   opacity:.35;
   cursor:default
 }
+.controls button.busy:disabled {
+  opacity:.8;
+  cursor:progress
+}
 #hint {
   display:block;
   text-align:center;
