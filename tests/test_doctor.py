@@ -44,6 +44,14 @@ class DoctorTest(unittest.TestCase):
         self.assertEqual(checks["journeyman service"].status, "WARN")
         self.assertFalse(doctor.failed(list(checks.values())))
 
+    def test_audio_dropped_by_server_fails(self):
+        real = self.script.reply
+        self.script.reply = lambda b: ({"content": "I need an audio file to describe it for you."}
+                                       if "input_audio" in json.dumps(b) else real(b))
+        checks = self.run_doctor()
+        self.assertEqual(checks["audio input"].status, "FAIL")
+        self.assertIn("Ollama", checks["audio input"].hint)
+
     def test_falls_back_to_probing_ports(self):
         self.cfg.gemma_url = DEAD
         checks = self.run_doctor(env_url=DEAD, probes=[(DEAD, "vLLM"), (self.url, "llama.cpp")])

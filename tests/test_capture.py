@@ -86,6 +86,17 @@ class CaptureTest(unittest.TestCase):
         self.assertIn(f"Frames (oldest first): {frame_id}", text)
         self.assertIn("I pull the old cable out", text)
 
+    def test_failed_observe_resends_its_frames_next_time(self):
+        self.core.eyes.ingest(JPEG)
+        self.c.clock = lambda: time.time() + 30
+        with mock.patch.object(self.core.vision, "ask_json", side_effect=RuntimeError("took longer than 60s")):
+            self.c.observe(force=True)
+        first = next(iter(self.core.state.frames))
+        self.c.observe(force=True)
+        text = " ".join(p.get("text", "") for p in self.script.requests[-1]["messages"][-1]["content"]
+                        if p["type"] == "text")
+        self.assertIn(f"Frame {first}", text)
+
     def test_no_repeat_steps(self):
         step = {"title": "Unplug the old cable", "action": "unplugs the old network cable"}
         self.observe({"new_steps": [step], "unexplained": []})
@@ -151,6 +162,21 @@ class CaptureTest(unittest.TestCase):
         self.assertFalse(self.c.maybe_ask(now + 10))
         self.assertTrue(self.c.maybe_ask(now + 25))
         self.assertEqual(len(self.core.state.questions), 2)
+
+    def test_gap_from_a_slow_observe_is_still_asked(self):
+        clock = [time.time()]
+        self.c.clock = lambda: clock[0]
+        real = self.core.vision.ask_json
+
+        def slow(*a, **kw):
+            clock[0] += capture.GAP_TTL_S + 80
+            return real(*a, **kw)
+        self.core.eyes.ingest(JPEG)
+        self.script.observe_replies.append(LABEL_GAP)
+        with mock.patch.object(self.core.vision, "ask_json", side_effect=slow):
+            self.c.observe(force=True)
+        self.c.last_utterance_end = 0
+        self.assertTrue(self.c.maybe_ask(clock[0] + 1))
 
     def test_stale_gaps_and_unanswered_questions_expire(self):
         self.observe(LABEL_GAP)

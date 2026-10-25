@@ -17,6 +17,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .config import Config
+from .ears import no_audio
 from .gemma import Gemma, audio_part, image_part, text_part
 from .local_http import internet_reachable, request_json
 
@@ -138,6 +139,9 @@ def check_audio(url: str, model: str) -> Check:
         msg, secs = chat(url, model, [audio_part(tone_wav()), text_part("Describe this audio in a few words.")])
     except Exception as e:
         return Check("audio input", "FAIL", _err(e), "audio needs vLLM with E2B/E4B")
+    if no_audio(msg.get("content") or ""):
+        return Check("audio input", "FAIL", f"answered without the audio: {(msg.get('content') or '')[:40]!r}",
+                     "this server drops audio (Ollama /v1 does); use vLLM with E2B/E4B, or --ears litert on the Mac")
     return Check("audio input", "PASS", f"{secs:.2f}s {(msg.get('content') or '')[:40]!r}")
 
 

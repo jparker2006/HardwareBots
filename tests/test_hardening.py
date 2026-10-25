@@ -232,6 +232,13 @@ class HardeningTest(unittest.TestCase):
         self.core.conductor.submit_audio(b"RIFF", 0, 1)
         self.assertEqual(self.said()[-1], DEAF)
 
+    def test_ears_refusal_is_not_heard_as_speech(self):
+        self.play(lambda b: {"content": "I'm sorry, I cannot fulfill this request. "
+                                        "I need an audio or video file to transcribe."})
+        self.core.conductor.submit_audio(b"RIFF", 0, 1)
+        self.assertEqual(self.said(), [NO_AUDIO])
+        self.assertFalse(any(e["type"] == "utterance_heard" for e in self.core.journal.read()))
+
     def test_teach_says_when_camera_check_is_down(self):
         ops.run(self.core, "save_step", {"title": "Unplug the old cable", "action": "unplugs it", "cue": "port empty",
                                          "procedure": "cable-swap"})
