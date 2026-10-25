@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#09090d"><title>Journeyman · live eye</title>
+<link rel="stylesheet" href="./style.css"><script defer src="./app.js"></script>
+</head>
+<body>
+<a class="skip" href="#procedure">Skip to procedure</a>
+<div class="wrap">
+<header><a class="brand" href="./">journeyman<span class="cursor">_</span></a><span class="local">runs on this device · no cloud</span><a class="link-state" href="/api/state" id="link">connecting</a></header>
+<main>
+<div class="prompt"><span class="path">~/journeyman</span> <span class="sigil">$</span> <span id="command">—</span><span class="cursor">_</span></div>
+<section class="speech" aria-label="Current spoken line">
+<div class="speech-copy"><div class="kicker" id="speech-label">voice / waiting</div><h1 id="hero" aria-live="polite">Waiting for the session.</h1></div>
+<div class="voice"><canvas id="orb" width="250" height="110" aria-hidden="true"></canvas><span id="voice-state">—</span></div>
+</section>
+<div class="workspace">
+<section class="eye" aria-labelledby="eye-heading">
+<h2 class="section-head" id="eye-heading"><span><span class="sigil">$</span> watch /eye</span><span class="rule"></span><span class="aside">live input</span></h2>
+<div class="vision-pair">
+<figure><figcaption><span>01 / camera</span><span>JPEG</span></figcaption><div class="image-box"><img id="camera" alt="Live workbench camera" hidden><span id="camera-empty" class="empty-camera">Waiting for camera.</span></div></figure>
+<figure><figcaption><span>02 / journeyman's eye</span><span>ASCII</span></figcaption><div class="image-box ascii-box"><canvas id="ascii" aria-label="Live camera rendered as purple ASCII art"></canvas><span id="ascii-empty" class="empty-camera">Waiting for camera.</span></div></figure>
+</div>
+<p class="observed"><span class="kicker">Observed:</span> <span id="observed">Not captured.</span></p>
+<div class="session-head kicker">learned this session<span id="session-id"></span></div>
+<div id="counters" class="counters"></div>
+<section class="questions" aria-labelledby="questions-title"><h2 class="section-head" id="questions-title"><span><span class="sigil">$</span> questions /open</span><span class="rule"></span><span class="aside" id="question-count">0</span></h2><div id="questions"></div></section>
+</section>
+<section class="document" id="procedure" aria-labelledby="procedure-title">
+<h2 class="section-head"><span><span class="sigil">$</span> cat /procedure</span><span class="rule"></span><span id="revision" class="aside">—</span></h2>
+<div class="document-title"><h2 id="procedure-title">No procedure yet.</h2><span class="kicker" id="progress-label"></span></div>
+<div id="progress" class="progress" hidden><div></div></div>
+<ol id="steps"></ol>
+</section>
+</div>
+</main>
+<footer><span id="camera-health">camera / checking</span><span id="latency">latency / not reported</span><a href="/api/state">/api/state ↗</a><span>Gemma 4 · NVIDIA Jetson Thor</span></footer>
+</div>
+</body></html>
