@@ -163,6 +163,21 @@ class CaptureTest(unittest.TestCase):
         self.assertTrue(self.c.maybe_ask(now + 25))
         self.assertEqual(len(self.core.state.questions), 2)
 
+    def test_gap_from_a_slow_observe_is_still_asked(self):
+        clock = [time.time()]
+        self.c.clock = lambda: clock[0]
+        real = self.core.vision.ask_json
+
+        def slow(*a, **kw):
+            clock[0] += capture.GAP_TTL_S + 80
+            return real(*a, **kw)
+        self.core.eyes.ingest(JPEG)
+        self.script.observe_replies.append(LABEL_GAP)
+        with mock.patch.object(self.core.vision, "ask_json", side_effect=slow):
+            self.c.observe(force=True)
+        self.c.last_utterance_end = 0
+        self.assertTrue(self.c.maybe_ask(clock[0] + 1))
+
     def test_stale_gaps_and_unanswered_questions_expire(self):
         self.observe(LABEL_GAP)
         self.assertFalse(self.c.maybe_ask(time.time() + capture.GAP_TTL_S + 5))

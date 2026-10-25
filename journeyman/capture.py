@@ -194,7 +194,7 @@ class CaptureMixin:
                     self.core.note("info", f"gap skipped ({why_not}): {gap['action']}")
                     continue
                 self.core.emit("gap_noticed", action=gap["action"], frame_id=gap["frame_id"], confidence=gap["confidence"])
-                self.candidates.append({**gap, "at": now})
+                self.candidates.append({**gap, "at": self.clock()})
                 self.candidates = self.candidates[-MAX_CANDIDATES:]
             self.core.note("info", f"observed {len(frames)} frames in {secs:.1f}s: "
                                    f"{len(steps)} steps, {len(gaps)} gaps")
