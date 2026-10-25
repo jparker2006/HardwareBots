@@ -245,3 +245,11 @@ class HardeningTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OllamaStructuredOutputTest(unittest.TestCase):
+    def test_ollama_501_structured_output_drops_json_mode(self):
+        from journeyman.gemma import Gemma, GemmaError
+        g = Gemma("http://127.0.0.1:9/v1", "m")
+        err = GemmaError("Gemma (look) refused the request (501): structured output is unavailable", code=501)
+        self.assertEqual(g._rejected(err, {"response_format": {"type": "json_object"}}), "response_format")

@@ -23,7 +23,7 @@ from .local_http import NotLocal, request_json
 THINKING = [re.compile(r"<\|channel>.*?(?:<channel\|>|$)", re.S), re.compile(r"<think>.*?(?:</think>|$)", re.S),
             re.compile(r"<thought>.*?(?:</thought>|$)", re.S)]
 REASONING_KEYS = ("reasoning_content", "reasoning", "thinking")
-OPTIONAL = {"response_format": ("response_format", "json_object", "json_schema", "json mode", "guided"),
+OPTIONAL = {"response_format": ("response_format", "json_object", "json_schema", "json mode", "guided", "structured output"),
             "chat_template_kwargs": ("chat_template_kwargs", "enable_thinking"),
             "reasoning_effort": ("reasoning_effort",)}
 
@@ -103,7 +103,7 @@ class Gemma:
         for key, words in OPTIONAL.items():
             if key in body and any(w in low for w in words):
                 return key
-        if e.code in (400, 422) and "response_format" in body and self.json_mode == "auto" \
+        if e.code in (400, 422, 501) and "response_format" in body and self.json_mode == "auto" \
                 and not re.search(r"image|audio|token|context|length|tool", low):
             return "response_format"
         return None
