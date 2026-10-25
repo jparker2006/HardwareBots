@@ -6,10 +6,12 @@
   python3 headset/headset.py --text           # type instead of talking
   python3 headset/headset.py --thor http://192.168.55.1:3000     # one fixed address (or several, comma-separated)
   python3 headset/headset.py --list-devices   # then --device 2 or --device "USB"
+  python3 headset/headset.py --ears litert    # Gemma E2B on the Mac (LiteRT-LM) turns speech into text; Thor gets text
 
 The mic is ignored while Journeyman speaks. If Thor restarts, the headset reconnects by itself. If the address
 in use stops answering (say Wi-Fi is turned off), it switches to the next one that answers and says so.
 Needs `pip3 install sounddevice numpy` for voice mode. Text mode needs nothing.
+`--ears litert` runs litert/ears.py in the LiteRT venv (see litert/README.md); if that can't start, audio goes to Thor.
 """
 from __future__ import annotations
 
@@ -258,11 +260,74 @@ def tell_hearing(link: Link) -> None:
     threading.Thread(target=send, daemon=True).start()
 
 
-def send_clip(link: Link, timing: Timing, samples, speech_end: float, note: str = "") -> None:
+LITERT_PYTHON = os.path.expanduser(os.environ.get("JM_LITERT_PYTHON", "~/jm-litert/bin/python"))
+EARS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "litert", "ears.py")
+
+
+class LiteRTEars:
+    """Gemma 4 E2B on the Mac via LiteRT-LM (litert/ears.py --serve in its own venv). Speech in, text out.
+
+    If it can't start, or a clip fails, `transcribe` returns None and the headset sends that clip's audio to Thor.
+    """
+
+    def __init__(self, console: Console, python: str = LITERT_PYTHON, script: str = EARS, popen=subprocess.Popen):
+        self.console, self.lock, self.proc = console, threading.Lock(), None
+        try:
+            self.proc = popen([python, script, "--serve"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                              stderr=subprocess.DEVNULL, text=True, bufsize=1)
+            first = json.loads(self.proc.stdout.readline() or '{"error": "ears exited at start"}')
+            if not first.get("ready"):
+                raise RuntimeError(first.get("error", "not ready"))
+            console.line(f"[ears] Gemma E2B on LiteRT-LM ready ({first.get('load_s', 0):.1f}s load); Thor gets text")
+        except Exception as e:
+            self.close()
+            console.line(f"[ears] LiteRT-LM unavailable ({e}); sending audio to Thor instead. See litert/README.md")
+
+    @property
+    def ok(self) -> bool:
+        return self.proc is not None
+
+    def transcribe(self, wav: bytes) -> dict | None:
+        if not self.ok:
+            return None
+        with self.lock:
+            try:
+                self.proc.stdin.write(json.dumps({"wav_b64": base64.b64encode(wav).decode()}) + "\n")
+                self.proc.stdin.flush()
+                out = json.loads(self.proc.stdout.readline() or '{"error": "ears exited"}')
+            except Exception as e:
+                out = {"error": str(e)}
+        if "error" in out:
+            self.console.line(f"[ears] {out['error']}; sending this clip's audio to Thor")
+            if self.proc.poll() is not None:
+                self.close()
+            return None
+        return out
+
+    def close(self) -> None:
+        if self.proc is not None:
+            try:
+                self.proc.kill()
+            except Exception:
+                pass
+        self.proc = None
+
+
+def send_clip(link: Link, timing: Timing, samples, speech_end: float, note: str = "", ears=None) -> None:
     seconds = len(samples) / RATE
     t0 = speech_end - seconds
     timing.ended(speech_end)
+    heard = ears.transcribe(to_wav(samples)) if ears is not None else None
+    if heard is not None and not heard["text"]:
+        timing.ended_at = None
+        link.console.line(f"[ears] no words in {seconds:.1f}s clip ({heard['seconds']:.1f}s), not sent")
+        return
     try:
+        if heard is not None:
+            link.call("/api/headset/utterance", {"text": heard["text"], "t0": t0, "t1": speech_end,
+                                                 "heard_by": "gemma-4-e2b-litert"}, retry_s=5)
+            link.console.line(f"you (gemma e2b, {heard['seconds']:.1f}s): {heard['text']}{note}")
+            return
         link.call("/api/headset/utterance", {"wav_b64": base64.b64encode(to_wav(samples)).decode(),
                                              "t0": t0, "t1": speech_end}, retry_s=5)
         link.console.line(f"[sent {seconds:.1f}s of speech{note}]")
@@ -283,7 +348,7 @@ def list_devices() -> None:
     print("\nuse --device <number> or --device <part of the name>; `>` marks the default input")
 
 
-def listen(link: Link, speaker: Speaker, timing: Timing, args) -> None:
+def listen(link: Link, speaker: Speaker, timing: Timing, args, ears=None) -> None:
     import sounddevice as sd
     from vad import Vad
 
@@ -312,11 +377,11 @@ def listen(link: Link, speaker: Speaker, timing: Timing, args) -> None:
             con.meter(meter(vad.level, vad.threshold, "REC" if vad.active else ""))
             if utt is not None:
                 note = ", cut at --max-seconds" if utt.cut else ""
-                threading.Thread(target=send_clip, args=(link, timing, utt.samples, time.time() - utt.silence_s, note),
+                threading.Thread(target=send_clip, args=(link, timing, utt.samples, time.time() - utt.silence_s, note, ears),
                                  daemon=True).start()
 
 
-def push_to_talk(link: Link, speaker: Speaker, timing: Timing, args) -> None:
+def push_to_talk(link: Link, speaker: Speaker, timing: Timing, args, ears=None) -> None:
     import numpy as np
     import sounddevice as sd
     from vad import rms
@@ -353,7 +418,7 @@ def push_to_talk(link: Link, speaker: Speaker, timing: Timing, args) -> None:
             note = ""
             if len(samples) > max_n:
                 samples, note = samples[:max_n], f", cut to first {args.max_seconds:.0f}s"
-            threading.Thread(target=send_clip, args=(link, timing, samples, end, note), daemon=True).start()
+            threading.Thread(target=send_clip, args=(link, timing, samples, end, note, ears), daemon=True).start()
 
 
 def type_loop(link: Link, timing: Timing) -> None:
@@ -383,6 +448,9 @@ def main(argv: list | None = None) -> None:
     p.add_argument("--threshold", type=float, help="speech loudness threshold (default: 3x room noise, adaptive)")
     p.add_argument("--end-silence", type=float, default=0.8, help="seconds of quiet that end an utterance")
     p.add_argument("--max-seconds", type=float, default=15.0, help="longest clip sent (Gemma's limit is 30)")
+    p.add_argument("--ears", choices=["thor", "litert"], default=os.environ.get("JM_EARS", "thor"),
+                   help="who turns speech into text: thor (send audio) or litert (Gemma E2B on this Mac)")
+    p.add_argument("--litert-python", default=LITERT_PYTHON, help="python of the LiteRT-LM venv (for --ears litert)")
     args = p.parse_args(argv)
     if args.list_devices:
         return list_devices()
@@ -398,16 +466,20 @@ def main(argv: list | None = None) -> None:
     timing = Timing()
     speaker = Speaker(link, timing, args.voice, args.rate)
     threading.Thread(target=speaker.run, daemon=True).start()
+    ears = LiteRTEars(console, os.path.expanduser(args.litert_python)) if args.ears == "litert" and not args.text else None
     try:
         if args.text:
             type_loop(link, timing)
         elif args.ptt:
-            push_to_talk(link, speaker, timing, args)
+            push_to_talk(link, speaker, timing, args, ears)
         else:
-            listen(link, speaker, timing, args)
+            listen(link, speaker, timing, args, ears)
     except (KeyboardInterrupt, EOFError):
         console.clear()
         print()
+    finally:
+        if ears is not None:
+            ears.close()
 
 
 if __name__ == "__main__":
