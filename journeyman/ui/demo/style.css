@@ -177,14 +177,118 @@ h1.long {
 [hidden] {
   display:none!important
 }
+#mode.capture {
+  color:#ff6b6b
+}
+h1.prompt {
+  color:#6f6880
+}
+.session {
+  display:flex;
+  flex-direction:column;
+  min-width:0;
+  min-height:0;
+  background:#0e0d13;
+  border:1px solid #28232f;
+  border-radius:20px;
+  padding:22px 24px
+}
+.session-head {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px
+}
+#badge {
+  display:flex;
+  align-items:center;
+  gap:12px;
+  font-size:26px
+}
+#badge b {
+  font-weight:600
+}
+#badge i {
+  width:14px;
+  height:14px;
+  border-radius:50%;
+  background:#4a4555
+}
+#badge.capture i {
+  background:#ff5b5b;
+  box-shadow:0 0 0 0 #ff5b5b88;
+  animation:pulse 1.4s infinite
+}
+#badge.capture b {
+  color:#ff8a8a
+}
+#badge.teach i {
+  background:var(--lime)
+}
+#badge.teach b {
+  color:var(--lime)
+}
+#timer {
+  font:26px var(--mono);
+  font-variant-numeric:tabular-nums
+}
+#session-sub {
+  margin:8px 0 14px;
+  color:var(--muted);
+  font:15px var(--mono);
+  min-height:1.2em
+}
+#empty {
+  flex:1;
+  margin:12px 0 0;
+  color:#6f6880;
+  font-size:22px
+}
+.controls {
+  margin-top:auto;
+  padding-top:18px;
+  border-top:1px solid #24212c
+}
+.buttons {
+  display:flex;
+  gap:12px
+}
+.controls button {
+  flex:1;
+  font:600 24px Geist,system-ui,sans-serif;
+  padding:20px 18px;
+  border-radius:12px
+}
+.controls button.stop {
+  background:#ff5b5b
+}
+.controls button.ghost {
+  flex:0 0 auto;
+  background:transparent;
+  color:var(--ink);
+  border:1px solid #3a3444
+}
+.controls button:disabled {
+  opacity:.35;
+  cursor:default
+}
+#hint {
+  display:block;
+  text-align:center;
+  margin-top:12px;
+  font:14px var(--mono);
+  color:var(--muted)
+}
 #steps {
   list-style:none;
   padding:0;
   margin:0;
   display:flex;
   flex-direction:column;
-  justify-content:center;
-  gap:12px;
+  flex:1;
+  min-height:0;
+  overflow:hidden;
+  gap:8px;
   min-width:0
 }
 .step {
@@ -192,11 +296,11 @@ h1.long {
   grid-template-columns:42px minmax(0,1fr);
   gap:14px;
   align-items:center;
-  padding:20px 18px;
+  padding:12px 14px;
   border-left:3px solid transparent;
   border-radius:0 10px 10px 0;
   color:var(--muted);
-  font-size:clamp(28px,1.7vw,32px);
+  font-size:clamp(22px,1.4vw,27px);
   line-height:1.22;
   animation:arrive .35s ease-out
 }
@@ -270,6 +374,14 @@ button {
 #say-state:empty {
   display:none
 }
+@keyframes pulse {
+  70% {
+    box-shadow:0 0 0 10px #ff5b5b00
+  }
+  100% {
+    box-shadow:0 0 0 0 #ff5b5b00
+  }
+}
 @keyframes arrive {
   from {
     opacity:0;
@@ -295,7 +407,7 @@ button {
     gap:60px
   }
   .step {
-    padding:24px 22px
+    padding:14px 16px
   }
 }
 @media(max-height:950px) and (min-width:901px) {
@@ -307,7 +419,7 @@ button {
     padding:26px 0
   }
   .step {
-    padding:17px 15px
+    padding:10px 12px
   }
   main {
     padding-bottom:30px
@@ -399,7 +511,7 @@ button {
   gap:6px
 }
 #steps.dense .step {
-  font-size:28px;
+  font-size:22px;
   line-height:1.12;
   padding:4px 14px
 }
