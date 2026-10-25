@@ -34,6 +34,17 @@ class ParseTest(unittest.TestCase):
         self.assertEqual(parse_observation({"new_steps": "none", "unexplained": None}, []), ([], []))
         self.assertEqual(parse_observation({}, []), ([], []))
 
+    def test_looking_is_not_a_step(self):
+        steps, gaps = parse_observation({"new_steps": [
+            {"title": "Observe cable connection", "action": "observes the cable connection"},
+            {"title": "Look at the screen", "action": "looks at the screen"},
+            {"title": "Read port label", "action": "looking at screen"},
+            {"title": "Hold cable to camera", "action": "holds the cable up to the camera"},
+            {"title": "Insert new cable", "action": "plugs in the new cable", "cue": "screen showing code/text"}],
+            "unexplained": [{"action": "watches the screen", "confidence": 0.9}]}, [])
+        self.assertEqual([(s["title"], s["cue"]) for s in steps], [("Insert new cable", None)])
+        self.assertEqual(gaps, [])
+
     def test_imperative_and_explained(self):
         self.assertEqual(imperative("labels both ends"), "Label both ends")
         self.assertEqual(imperative("He pushes the clip"), "Push the clip")
@@ -80,6 +91,38 @@ class CaptureTest(unittest.TestCase):
         self.observe({"new_steps": [step], "unexplained": []})
         self.observe({"new_steps": [dict(step, title="Remove the old cable")], "unexplained": []})
         self.assertEqual(len(self.c._steps()), 1)
+
+    def test_static_scene_for_60s_adds_no_steps(self):
+        base, still, moved = time.time() + 1, b"\x10" * 64, b"\x90" * 64
+        self.core.eyes.ingest(JPEG, at=base - 10, small=still)
+        self.c.last_observe_at = base
+        junk = {"new_steps": [{"title": "Insert new cable", "action": "plugs in the new cable"},
+                              {"title": "Observe screen display", "action": "observes the screen"}],
+                "unexplained": [{"action": "adjusts the cable", "confidence": 0.9}]}
+        for k in range(1, 13):
+            self.core.eyes.ingest(JPEG, at=base + 5 * k, small=still)
+            if k % 2 == 0:
+                self.script.observe_replies.append(junk)
+                self.c.clock = lambda: base + 5 * k
+                self.c.observe(force=True)
+        self.assertEqual(self.c._steps(), [])
+        self.assertEqual(self.c.candidates, [])
+        self.assertTrue(any("static scene" in n["text"] for n in self.core.state.notes))
+        self.script.observe_replies.append(junk)
+        self.core.eyes.ingest(JPEG, at=base + 65, small=moved)
+        self.c.clock = lambda: base + 66
+        self.c.observe(force=True)
+        self.assertEqual([st["title"] for st in self.c._steps()], ["Insert new cable"])
+
+    def test_static_scene_with_narration_keeps_the_step(self):
+        base, still = time.time() + 1, b"\x10" * 64
+        self.core.eyes.ingest(JPEG, at=base - 10, small=still)
+        self.c.last_observe_at = base - 1
+        self.core.eyes.ingest(JPEG, at=base + 5, small=still)
+        self.c.clock = lambda: base + 6
+        self.observe({"new_steps": [{"title": "Leave a slack loop", "action": "leaves a slack loop"}]},
+                     said="Now I leave a slack loop")
+        self.assertEqual([st["title"] for st in self.c._steps()], ["Leave a slack loop"])
 
     def test_skips_gap_already_explained(self):
         self.observe(LABEL_GAP, said="I label both ends of the cable so the next tech can trace it")

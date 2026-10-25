@@ -18,6 +18,8 @@ Reply with JSON only, this exact shape:
  "unexplained": [{{"action": "<what they did>", "frame_id": "<frame id>", "confidence": 0.8}}]}}
 Rules:
 - new_steps: only actions you can see that are not recorded yet. title: 2-6 words, starts with a verb.
+- A step is something the hands change. Never "observe", "look at", "watch" or describe the scene, the screen or the camera.
+- If the frames look the same and they said nothing new, use [].
 - narrated: true if they said what they did.
 - unexplained: a deliberate action they did but never said WHY. Skip it if they gave a reason.
 - confidence: 0.0-1.0, how sure you are you saw it.
@@ -38,6 +40,10 @@ COMPACT = "\nBe brief: one line of JSON, no spaces, at most 2 new_steps and 1 un
 
 REASON_WORDS = re.compile(r"\b(because|cause|so that|so the|so it|so i|so you|otherwise|in case|to make sure|"
                           r"to avoid|to keep|to stop|to prevent|or else|that way|reason)\b")
+PASSIVE = re.compile(r"^(?:the )?(?:technician |tech |expert |user |person |worker |he |she |they )?"
+                     r"(?:observ\w*|look\w*|watch\w*|view\w*|see|sees|seeing|stare\w*|monitor\w*|notic\w*|glanc\w*)\b"
+                     r"|\b(?:camera|webcam)\b", re.I)
+SCENE = re.compile(r"\b(?:frame|image|picture|photo|scene|in view|on screen|visible|showing|shown|displayed)\b", re.I)
 CONTEXT_S = 30.0
 GAP_TTL_S = 60.0
 PENDING_TTL_S = 60.0
@@ -75,6 +81,16 @@ def explained(action: str, utterances: list[str]) -> bool:
     return False
 
 
+def passive(text: str | None) -> bool:
+    """True for 'observe/look at/watch' or camera talk: looking, not doing."""
+    return bool(PASSIVE.search((text or "").strip()))
+
+
+def scene_talk(text: str | None) -> bool:
+    """True for text that only describes the view ('screen showing code/text') instead of a result."""
+    return passive(text) or bool(SCENE.search(text or ""))
+
+
 def _conf(value) -> float:
     try:
         return max(0.0, min(1.0, float(value)))
@@ -99,19 +115,20 @@ def parse_observation(result: dict, frame_ids: list[str]) -> tuple[list[dict], l
         return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
 
     steps = []
-    for st in items("new_steps")[:3]:
+    for st in items("new_steps")[:6]:
         title, action = imperative(_str(st.get("title")) or _str(st.get("action"))), _str(st.get("action"))
-        if title and action:
+        if title and action and not passive(title) and not passive(action):
             narrated = st.get("narrated")
-            steps.append({"title": title, "action": action, "cue": _str(st.get("cue")) or None,
+            cue = _str(st.get("cue"))
+            steps.append({"title": title, "action": action, "cue": None if scene_talk(cue) else cue or None,
                           "frame_id": frame(st.get("frame_id")),
                           "narrated": narrated is True or str(narrated).lower() == "true"})
     gaps = []
-    for g in items("unexplained")[:2]:
+    for g in items("unexplained")[:4]:
         action = _str(g.get("action"))
-        if action:
+        if action and not passive(action):
             gaps.append({"action": action, "frame_id": frame(g.get("frame_id")), "confidence": _conf(g.get("confidence"))})
-    return steps, gaps
+    return steps[:3], gaps[:2]
 
 
 class CaptureMixin:
@@ -138,7 +155,8 @@ class CaptureMixin:
             return None
         try:
             s, now = self.core.state, self.clock()
-            since = self.last_observe_at - 2
+            prev = self.last_observe_at
+            since = prev - 2
             self.last_observe_at, self.observed_seq = now, s.last_seq
             frames = [f for f in s.frames.values() if f["t"] >= since]
             most = max(1, min(6, self.cfg.max_images))
@@ -158,6 +176,9 @@ class CaptureMixin:
             steps, gaps = parse_observation(result, ids)
             for item in steps + gaps:
                 item["frame_id"] = item["frame_id"] or ids[-1]
+            if (steps or gaps) and not self._said(prev) and all(f.get("still") for f in frames):
+                self.core.note("info", f"static scene, nothing said: dropped {len(steps)} steps, {len(gaps)} gaps")
+                steps, gaps = [], []
             seen = [x["action"] for x in steps + gaps]
             if seen:
                 self.core.emit("observed", text="; ".join(seen), frame_id=(steps + gaps)[0]["frame_id"], source="capture")

@@ -59,6 +59,18 @@ class TeachTest(unittest.TestCase):
         self.assertIn("common mistake here: labelling only one end", self.last())
         self.assertIn("port one is empty", self.look_prompts()[-1])
 
+    def test_scene_description_is_never_spoken(self):
+        ops.run(self.core, "save_step", {"title": "Read port label", "action": "looking at screen",
+                                         "cue": "screen showing code/text", "procedure": "cable-swap"})
+        self.c.submit_text("teach me")
+        self.assertTrue(self.last().endswith("Step 1 of 1: Read port label."), self.last())
+        self.assertNotIn("looking at screen", self.last())
+        self.assertNotIn("showing", self.last())
+        self.script.look_answers = [True]
+        self.core.eyes.ingest(JPEG)
+        self.c.submit_text("done")
+        self.assertIn("Look for: Read port label", self.look_prompts()[-1])
+
     def test_repeat_back_left_whats_next(self):
         self.teach()
         first = self.last()

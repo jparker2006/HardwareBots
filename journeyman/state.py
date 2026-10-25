@@ -88,7 +88,8 @@ class State:
             if s:
                 s["transcript"].append({"t0": d["t0"], "t1": d["t1"], "text": d["text"], "seq": event["seq"]})
         elif kind == "frame_kept":
-            self.frames[d["frame_id"]] = {"id": d["frame_id"], "path": d["path"], "t": d.get("at", t)}
+            self.frames[d["frame_id"]] = {"id": d["frame_id"], "path": d["path"], "t": d.get("at", t),
+                                          "still": bool(d.get("still"))}
             if len(self.frames) > 600:
                 pinned = {st.get("frame_id") for st in self.steps.values()}
                 old = next((f for f in self.frames if f not in pinned), None)

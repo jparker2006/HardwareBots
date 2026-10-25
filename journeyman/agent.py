@@ -1,7 +1,7 @@
 """Gemma with tools. Every tool is an operation from ops.REGISTRY.
 
 The loop is bounded by config.max_tool_calls. Questions are answered only from saved knowledge:
-if search finds nothing, the reply is "not captured" and the question is logged, whatever the model said.
+if search finds nothing, or a "why" finds no saved reason, the reply is "not captured" and the question is logged, whatever the model said.
 JM_SYSTEM_ROLE=merge folds the system prompt and tool results into user turns for templates without them."""
 from __future__ import annotations
 
@@ -26,12 +26,29 @@ Notes from past sessions:
 NOT_CAPTURED = "That's not captured yet. I'll ask the expert next session."
 DIDNT_CATCH = "Sorry, I didn't catch that. Could you say it again?"
 FAILURES = (OSError, ValueError, KeyError, IndexError, TypeError)
+WHY = re.compile(r"\b(why|how come|what for|reason)\b")
+LEAD_IN = re.compile(r"\b(based on|according to|from) (the|my) (saved knowledge|knowledge base|search( results)?|notes)[,:]?\s*", re.I)
+META = re.compile(r"\b(saved knowledge|knowledge base|search results?|tool calls?|function calls?|my tools|"
+                  r"(i will|i'll|let me) (call|search|use|look that up))\b", re.I)
 QUESTION = re.compile(r"^(why|how|what|where|when|which|who|should|can|could|do|does|is|are|will|would|tell me)\b")
 
 
 def is_question(text: str) -> bool:
     text = re.sub(r"^\s*((hello|hey|hi|ok|okay|so|um+|uh+|alright|journeyman)\b[\s,.:!?]*)+", "", text.lower())
     return "?" in text or bool(QUESTION.match(text))
+
+
+def asks_why(text: str) -> bool:
+    return bool(WHY.search(text.lower()))
+
+
+def unmeta(text: str) -> str:
+    """Drop tool names and talk about tools or saved knowledge; the listener only wants the answer."""
+    names = "|".join(map(re.escape, ops.REGISTRY))
+    text = re.sub(r"\b(?:\w+_\w+|(?:%s)(?=\s*\())\b\s*(?:\([^)]*\))?[:,]?" % names, " ", text)
+    text = LEAD_IN.sub("", text)
+    keep = [x for x in re.split(r"(?<=[.!?])\s+", text.strip()) if re.search(r"[^\W\d_]", x) and not META.search(x)]
+    return " ".join(" ".join(keep).split())
 
 
 def speakable(text: str, sentences: int = 2) -> str:
@@ -41,7 +58,8 @@ def speakable(text: str, sentences: int = 2) -> str:
     text = re.sub(r"(?m)^\s*(?:#{1,6}|>|[-*+•]|\d+[.)])\s+", "", text)
     text = re.sub(r"(\*\*|__|\*|`|~~)(.+?)\1", r"\2", text)
     text = re.sub(r"(?<!\w)_(.+?)_(?!\w)", r"\1", text)
-    text = " ".join(re.sub(r"[*`#|]+", " ", text).split())
+    text = unmeta(" ".join(re.sub(r"[*`#|]+", " ", text).split()))
+    text = text[:1].upper() + text[1:]
     return " ".join(re.split(r"(?<=[.!?])\s+", text)[:sentences]).strip()
 
 
@@ -87,6 +105,8 @@ class Agent:
             return self.respond_without_tools(utterance, turn)
         if is_question(utterance) and not turn.found:
             return self.respond_without_tools(utterance, turn)
+        if asks_why(utterance) and turn.found and not turn.found[0]["whys"]:
+            return self._say(NOT_CAPTURED, utterance, turn)
         if turn.said and reply:
             return reply
         if not reply:
@@ -138,7 +158,7 @@ class Agent:
     def respond_without_tools(self, utterance: str, turn: Turn | None = None, use_model: bool = True) -> str:
         turn = turn or Turn()
         found = ops.run(self.core, "search_knowledge", {"query": utterance})["matches"]
-        if not found:
+        if not found or asks_why(utterance) and not found[0]["whys"]:
             return self._say(NOT_CAPTURED, utterance, turn)
         if not use_model:
             return self._say(self._from_knowledge(found), utterance, turn)
