@@ -30,7 +30,7 @@ QUESTION = re.compile(r"^(why|how|what|where|when|which|who|should|can|could|do|
 
 
 def is_question(text: str) -> bool:
-    text = re.sub(r"^\s*(hey\s+)?journeyman[\s,:.!]*", "", text.lower())
+    text = re.sub(r"^\s*((hello|hey|hi|ok|okay|so|um+|uh+|alright|journeyman)\b[\s,.:!?]*)+", "", text.lower())
     return "?" in text or bool(QUESTION.match(text))
 
 

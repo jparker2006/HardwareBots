@@ -24,6 +24,15 @@ COMMANDS = [
 ]
 
 
+WAKE = re.compile(r"\bjourney[\s-]*m[ae]n\b", re.I)
+FILLER = re.compile(r"^\s*((hello|hey|hi|ok|okay|so|um+|uh+|alright|journeyman)\b[\s,.:!?]*)+", re.I)
+QWORDS = r"(why|how|what|what's|where|when|which|who|should|can|could|do|does|is|are|will|would|tell me)\b"
+
+
+def normalize(text: str) -> str:
+    return WAKE.sub("Journeyman", text).strip()
+
+
 class Conductor(CaptureMixin, TeachMixin):
     def __init__(self, core, sync: bool = False):
         self.core = core
@@ -113,7 +122,7 @@ class Conductor(CaptureMixin, TeachMixin):
             self.core.note("info", f"heard in {secs:.1f}s")
         else:
             text = payload
-        text = text.strip()
+        text = normalize(text)
         if not text:
             return
         self.last_utterance_end = t1
@@ -151,7 +160,7 @@ class Conductor(CaptureMixin, TeachMixin):
                 self.teach_check()
             elif cmd and cmd.startswith("teach_"):
                 self.teach_command(cmd)
-            elif self._addressed(text) or "?" in text or re.match(r"^\s*(why|how|what|where|when|which|should)\b", text.lower()):
+            elif self._addressed(text) or self._asks(text):
                 self.core.agent.respond(text)
         elif self._addressed(text):
             self.core.agent.respond(text)
@@ -159,6 +168,11 @@ class Conductor(CaptureMixin, TeachMixin):
     @staticmethod
     def _addressed(text: str) -> bool:
         return "journeyman" in text.lower() or text.strip().endswith("?")
+
+    @staticmethod
+    def _asks(text: str) -> bool:
+        bare = FILLER.sub("", text.lower())
+        return "?" in text or bool(re.match(r"^\s*" + QWORDS, bare))
 
     # ---- capture ------------------------------------------------------------
     def _tick_loop(self) -> None:
