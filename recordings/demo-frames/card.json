@@ -1,0 +1,37 @@
+{
+  "procedure": "cable-swap",
+  "steps": [
+    {
+      "title": "Find the port by its label",
+      "action": "Find the port by reading its label, not by counting ports",
+      "cue": "A finger on the labeled port",
+      "why": "Counting goes wrong when a row is skipped or the panel is mounted upside down",
+      "consequence": "You pull a live cable someone else depends on",
+      "frame": "frames/02-find-port.jpg"
+    },
+    {
+      "title": "Pull the old cable straight out",
+      "action": "Press the latch and pull the old cable straight out",
+      "cue": "The old cable comes out level with the port",
+      "why": "Pulling at an angle bends the latch and the port pins",
+      "consequence": "The port stops holding a cable",
+      "frame": "frames/03-pull-old.jpg"
+    },
+    {
+      "title": "Label both ends of the new cable",
+      "action": "Label both ends of the new cable before plugging it in",
+      "cue": "A label on each end of the new cable",
+      "why": "So the next tech can trace it without pulling every cable",
+      "consequence": "Someone has to unplug cables one by one to find this one",
+      "frame": "frames/04-label-ends.jpg"
+    },
+    {
+      "title": "Plug in and leave a slack loop",
+      "action": "Plug the new cable in and leave a little loop of slack",
+      "cue": "The cable clicks in and hangs in a small loop",
+      "why": "Slack keeps the cable from pulling on the port when something moves",
+      "consequence": "A tight cable works loose or snaps the latch",
+      "frame": "frames/05-plug-slack.jpg"
+    }
+  ]
+}
