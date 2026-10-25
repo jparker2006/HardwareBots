@@ -68,8 +68,9 @@ def _err(e: Exception) -> str:
 
 
 def chat(url: str, model: str, content, tools=None, max_tokens: int = 40) -> tuple[dict, float]:
-    return Gemma(url, model).chat([{"role": "user", "content": content}], tools=tools, max_tokens=max_tokens,
-                                  temperature=0)
+    gemma = Gemma(url, model)
+    gemma.timeouts["default"] = 120.0
+    return gemma.chat([{"role": "user", "content": content}], tools=tools, max_tokens=max_tokens, temperature=0)
 
 
 def list_models(url: str, timeout: float = 3.0) -> list[str]:
